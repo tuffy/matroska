@@ -1,6 +1,6 @@
 [package]
 name = "mkv"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Brian Langenberger <bjl@usa.net>"]
 
 [dependencies]
