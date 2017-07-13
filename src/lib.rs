@@ -1,4 +1,5 @@
 use std::io;
+use std::fs::File;
 
 extern crate bitstream_io;
 use bitstream_io::{BitReader, BE};
@@ -11,7 +12,8 @@ pub enum ReadMKVError {
     InvalidUint,
     InvalidFloat,
     InvalidDate,
-    UTF8(std::string::FromUtf8Error)
+    UTF8(std::string::FromUtf8Error),
+    UnexpectedID(u32)
 }
 
 pub fn read_element_id(r: &mut io::Read) -> Result<u32,ReadMKVError> {
@@ -114,19 +116,30 @@ pub fn read_bin(r: &mut io::Read, size: u64) -> Result<Vec<u8>,ReadMKVError> {
 }
 
 pub struct LimitedReader<'a> {
-    reader: &'a mut io::Read,
+    reader: &'a mut File,
     length: usize
 }
 
 impl<'a> LimitedReader<'a> {
     #[inline]
-    pub fn new(reader: &mut io::Read, length: u64) -> LimitedReader {
+    pub fn new(reader: &mut File, length: u64) -> LimitedReader {
         LimitedReader{reader: reader, length: length as usize}
     }
 
     #[inline]
     pub fn empty(&self) -> bool {
         self.length == 0
+    }
+
+    pub fn skip(&mut self, bytes: usize) -> Result<(),io::Error> {
+        /*FIXME - have this skip data*/
+        use std::cmp::min;
+        use std::io::Seek;
+        use std::io::SeekFrom;
+
+        let bytes = min(bytes, self.length);
+        self.length -= bytes;
+        self.reader.seek(SeekFrom::Current(bytes as i64)).map(|_| ())
     }
 }
 
@@ -137,5 +150,89 @@ impl<'a> io::Read for LimitedReader<'a> {
         let to_read = min(self.length, buf.len());
         self.length -= to_read;
         self.reader.read(&mut buf[0..to_read])
+    }
+}
+
+#[derive(Debug)]
+pub struct EBMLHeader {
+    pub version: u64,
+    pub read_version: u64,
+    pub max_id_length: u64,
+    pub max_size_length: u64,
+    pub doc_type: String,
+    pub doc_type_version: u64,
+    pub doc_type_read_version: u64
+}
+
+impl EBMLHeader {
+    pub fn new() -> EBMLHeader {
+        EBMLHeader{version: 1,
+                   read_version: 1,
+                   max_id_length: 4,
+                   max_size_length: 8,
+                   doc_type: "matroska".to_string(),
+                   doc_type_version: 1,
+                   doc_type_read_version: 1}
+    }
+
+    pub fn parse(reader: &mut File) -> Result<EBMLHeader,ReadMKVError> {
+        let id = read_element_id(reader)?;
+        if id != 0x1A45DFA3 {
+            return Err(ReadMKVError::UnexpectedID(id));
+        }
+        let size = read_element_size(reader)?;
+        let mut reader = LimitedReader::new(reader, size);
+        let mut header = EBMLHeader::new();
+        while !reader.empty() {
+            let id = read_element_id(&mut reader)?;
+            let size = read_element_size(&mut reader)?;
+            match id {
+                0x4286 => {header.version = read_uint(&mut reader, size)?;}
+                0x42F7 => {header.read_version = read_uint(&mut reader, size)?;}
+                0x42F2 => {header.max_id_length =
+                    read_uint(&mut reader, size)?;}
+                0x42F3 => {header.max_size_length =
+                    read_uint(&mut reader, size)?;}
+                0x4282 => {header.doc_type =
+                    read_utf8(&mut reader, size)?;}
+                0x4287 => {header.doc_type_version =
+                    read_uint(&mut reader, size)?;}
+                0x4285 => {header.doc_type_read_version =
+                    read_uint(&mut reader, size)?;}
+                _ => {return Err(ReadMKVError::UnexpectedID(id));}
+            }
+        }
+        Ok(header)
+    }
+}
+
+#[derive(Debug)]
+pub struct Segment {
+    /*FIXME*/
+}
+
+impl Segment {
+    pub fn new() -> Segment {
+        Segment{/*FIXME*/}
+    }
+
+    pub fn parse(reader: &mut File) -> Result<Segment,ReadMKVError> {
+        let id = read_element_id(reader)?;
+        if id != 0x18538067 {
+            return Err(ReadMKVError::UnexpectedID(id));
+        }
+        let size = read_element_size(reader)?;
+        let mut reader = LimitedReader::new(reader, size);
+        let segment = Segment::new();
+        while !reader.empty() {
+            let id = read_element_id(&mut reader)?;
+            let size = read_element_size(&mut reader)?;
+            reader.skip(size as usize).map_err(ReadMKVError::Io)?;
+            println!("segment ID : {:X}", id);
+            //match id {
+            //    /*FIXME - implement this*/
+            //}
+        }
+        Ok(segment)
     }
 }
