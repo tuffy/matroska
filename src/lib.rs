@@ -1,5 +1,5 @@
 use std::io;
-use std::fs::File;
+use std::fmt::{Debug, Formatter};
 
 extern crate bitstream_io;
 use bitstream_io::{BitReader, BE};
@@ -13,78 +13,227 @@ pub enum ReadMKVError {
     InvalidFloat,
     InvalidDate,
     UTF8(std::string::FromUtf8Error),
-    UnexpectedID(u32)
+    UnexpectedID(u32),
+    SubElementTooLarge
 }
 
-pub fn read_element_id(r: &mut io::Read) -> Result<u32,ReadMKVError> {
-    let mut r = BitReader::<BE>::new(r);
+pub enum MKVElementType {
+    Signed(i64),
+    Unsigned(u64),
+    Float(f64),
+    String(String),
+    UTF8(String),
+    Date(i64), /*FIXME - turn this into date/time*/
+    Master(Vec<MKVElement>),
+    Binary(Vec<u8>),
+    Void(u64),
+    Unknown
+}
 
+impl Debug for MKVElementType {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        match self {
+            &MKVElementType::Signed(ref x) => {write!(f, "Signed({:?})", x)}
+            &MKVElementType::Unsigned(ref x) => {write!(f, "Unsigned({:?})", x)}
+            &MKVElementType::Float(ref x) => {write!(f, "Float({:?})", x)}
+            &MKVElementType::String(ref x) => {write!(f, "String({:?})", x)}
+            &MKVElementType::UTF8(ref x) => {write!(f, "UTF8({:?})", x)}
+            &MKVElementType::Date(ref x) => {write!(f, "Date({:?})", x)}
+            &MKVElementType::Master(ref x) => {write!(f, "Master({:?})", x)}
+            &MKVElementType::Binary(ref x) => {
+                write!(f, "Binary({} bytes)", x.len())
+            }
+            &MKVElementType::Void(ref x) => {write!(f, "Void({} bytes)", x)}
+            &MKVElementType::Unknown => {write!(f, "Unknown")}
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct MKVElement {
+    pub id: u32,
+    pub size: u64, /*total size of element, including id/size*/
+    pub value: MKVElementType
+}
+
+impl MKVElement {
+    pub fn parse(r: &mut BitReader<BE>) -> Result<MKVElement,ReadMKVError> {
+        let (id, id_len) = read_element_id(r)?;
+        let (size, size_len) = read_element_size(r)?;
+
+        /*FIXME - generate different elements based on type*/
+        let value = match id {
+            0xFB | 0xFD | 0x75A2 | 0x537F => {
+                MKVElementType::Signed(read_int(r, size)?)
+            }
+
+            0x83 | 0x88 | 0x89 |
+            0x91 | 0x92 | 0x96 | 0x97 | 0x98 |
+            0x9A | 0x9B | 0x9C | 0x9D | 0x9F |
+            0xA7 | 0xAA | 0xAB |
+            0xB0 | 0xB2 | 0xB3 | 0xB9 | 0xBA |
+            0xC0 | 0xC6 | 0xC7 | 0xC9 | 0xCA |
+            0xCB | 0xCC | 0xCD | 0xCE | 0xCF |
+            0xD7 |
+            0xE5 | 0xE6 | 0xE7 | 0xEA | 0xEB | 0xED | 0xEE |
+            0xF0 | 0xF1 | 0xF7 | 0xFA |
+
+            0x4254 | 0x4285 | 0x4286 | 0x4287 | 0x42F2 | 0x42F3 |
+            0x42F7 | 0x4484 | 0x4598 | 0x45BC | 0x45BD | 0x45DB |
+            0x45DD | 0x4661 | 0x4662 | 0x46AE | 0x47E1 | 0x47E5 |
+            0x47E6 |
+            0x5031 | 0x5032 | 0x5033 | 0x535F | 0x5378 | 0x53AC |
+            0x53B8 | 0x53B9 | 0x53C0 | 0x54AA | 0x54B0 | 0x54B2 |
+            0x54B3 | 0x54BA | 0x54BB | 0x54CC | 0x54DD | 0x55AA |
+            0x55B1 | 0x55B2 | 0x55B3 | 0x55B4 | 0x55B5 | 0x55B6 |
+            0x55B7 | 0x55B8 | 0x55B9 | 0x55BA | 0x55BB | 0x55BC |
+            0x55BD | 0x55EE | 0x56AA | 0x56BB | 0x58D7 |
+            0x6264 | 0x63C3 | 0x63C4 | 0x63C5 | 0x63C6 | 0x63C9 |
+            0x66BF | 0x66FC | 0x68CA | 0x6922 | 0x6955 | 0x69BF |
+            0x69FC | 0x6DE7 | 0x6DF8 | 0x6EBC | 0x6FAB |
+            0x73C4 | 0x73C5 | 0x7446 | 0x7E8A | 0x7E9A |
+
+            0x234E7A | 0x23E383 | 0x2AD7B1 => {
+                MKVElementType::Unsigned(read_uint(r, size)?)
+            }
+
+            0xB5 |
+            0x4489 | 0x55D1 | 0x55D2 | 0x55D3 | 0x55D4 | 0x55D5 |
+            0x55D6 | 0x55D7 | 0x55D8 | 0x55D9 | 0x55DA | 0x78B5 |
+            0x23314F | 0x2383E3 | 0x2FB523 => {
+                MKVElementType::Float(read_float(r, size)?)
+            }
+
+            0x86 |
+            0x4282 | 0x437C | 0x437E | 0x447A | 0x4660 | 0x63CA |
+            0x22B59C | 0x26B240 | 0x3B4040 => {
+                /*FIXME - restrict this to ASCII encoding*/
+                MKVElementType::String(read_utf8(r, size)?)
+            }
+
+            0x85 |
+            0x4487 | 0x45A3 | 0x466E | 0x467E | 0x4D80 | 0x536E |
+            0x5654 | 0x5741 | 0x7384 | 0x7BA9 |
+            0x258688 | 0x3A9697 | 0x3C83AB | 0x3E83BB => {
+                MKVElementType::UTF8(read_utf8(r, size)?)
+            }
+
+            0x4461 => {MKVElementType::Date(read_date(r, size)?)}
+
+            0x80 | 0x8E | 0x8F | 0xA0 | 0xA6 | 0xAE | 0xB6 | 0xB7 | 0xBB |
+            0xC8 | 0xDB | 0xE0 | 0xE1 | 0xE2 | 0xE3 | 0xE4 | 0xE8 | 0xE9 |
+
+            0x45B9 | 0x4DBB | 0x5034 | 0x5035 | 0x55B0 | 0x55D0 | 0x5854 |
+            0x61A7 | 0x6240 | 0x63C0 | 0x6624 | 0x67C8 | 0x6911 | 0x6924 |
+            0x6944 | 0x6D80 | 0x7373 | 0x75A1 | 0x7E5B | 0x7E7B |
+            0x1043A770 | 0x114D9B74 | 0x1254C367 | 0x1549A966 | 0x1654AE6B |
+            0x18538067 | 0x1941A469 | 0x1A45DFA3 | 0x1B538667 | 0x1C53BB6B |
+            0x1F43B675 => {
+                let mut remaining_size = size;
+                let mut sub_elements = Vec::new();
+                while remaining_size > 0 {
+                    let sub_element = MKVElement::parse(r)?;
+                    if sub_element.size <= size {
+                        remaining_size -= sub_element.size;
+                        sub_elements.push(sub_element);
+                    } else {
+                        return Err(ReadMKVError::SubElementTooLarge);
+                    }
+                }
+                MKVElementType::Master(sub_elements)
+            }
+
+            0xA1 | 0xA2 | 0xA3 | 0xA4 | 0xA5 | 0xAF | 0xBF | 0xC1 | 0xC4 |
+            0x4255 | 0x4444 | 0x4485 | 0x450D | 0x465C | 0x4675 | 0x47E2 |
+            0x47E3 | 0x47E4 | 0x53AB | 0x63A2 | 0x6532 | 0x66A5 | 0x6933 |
+            0x69A5 | 0x6E67 | 0x73A4 | 0x7D7B | 0x7EA5 | 0x7EB5 |
+            0x2EB524 | 0x3CB923 | 0x3EB923 => {
+                MKVElementType::Binary(read_bin(r, size)?)
+            }
+
+            0xEC => {
+                let _ = read_bin(r, size)?;
+                MKVElementType::Void(size)
+            }
+
+            _ => {
+                let _ = read_bin(r, size)?;
+                MKVElementType::Unknown
+            }
+        };
+
+        Ok(MKVElement{id: id, size: id_len + size_len + size, value: value})
+    }
+}
+
+pub fn read_element_id(r: &mut BitReader<BE>) ->
+    Result<(u32,u64),ReadMKVError> {
     match r.read_unary1() {
         Ok(0) => {
             r.read::<u32>(7)
              .map_err(ReadMKVError::Io)
-             .map(|u| 0b10000000 | u)
+             .map(|u| (0b10000000 | u, 1))
         }
         Ok(1) => {
             r.read::<u32>(6 + 8)
              .map_err(ReadMKVError::Io)
-             .map(|u| (0b01000000 << 8) | u)
+             .map(|u| ((0b01000000 << 8) | u, 2))
         }
         Ok(2) => {
             r.read::<u32>(5 + 16)
              .map_err(ReadMKVError::Io)
-             .map(|u| (0b00100000 << 16) | u)
+             .map(|u| ((0b00100000 << 16) | u, 3))
         }
         Ok(3) => {
             r.read::<u32>(4 + 24)
              .map_err(ReadMKVError::Io)
-             .map(|u| (0b00010000 << 24) | u)
+             .map(|u| ((0b00010000 << 24) | u, 4))
         }
         Ok(_) => {Err(ReadMKVError::InvalidID)}
         Err(err) => {Err(ReadMKVError::Io(err))}
     }
 }
 
-pub fn read_element_size(r: &mut io::Read) -> Result<u64,ReadMKVError> {
-    let mut r = BitReader::<BE>::new(r);
-
+pub fn read_element_size(r: &mut BitReader<BE>) ->
+    Result<(u64,u64),ReadMKVError> {
     match r.read_unary1() {
-        Ok(0) => {r.read(7 + (0 * 8)).map_err(ReadMKVError::Io)}
-        Ok(1) => {r.read(6 + (1 * 8)).map_err(ReadMKVError::Io)}
-        Ok(2) => {r.read(5 + (2 * 8)).map_err(ReadMKVError::Io)}
-        Ok(3) => {r.read(4 + (3 * 8)).map_err(ReadMKVError::Io)}
-        Ok(4) => {r.read(3 + (4 * 8)).map_err(ReadMKVError::Io)}
-        Ok(5) => {r.read(2 + (5 * 8)).map_err(ReadMKVError::Io)}
-        Ok(6) => {r.read(1 + (6 * 8)).map_err(ReadMKVError::Io)}
-        Ok(7) => {r.read(0 + (7 * 8)).map_err(ReadMKVError::Io)}
+        Ok(0) => {r.read(7 + (0 * 8)).map(|s| (s, 1)).map_err(ReadMKVError::Io)}
+        Ok(1) => {r.read(6 + (1 * 8)).map(|s| (s, 2)).map_err(ReadMKVError::Io)}
+        Ok(2) => {r.read(5 + (2 * 8)).map(|s| (s, 3)).map_err(ReadMKVError::Io)}
+        Ok(3) => {r.read(4 + (3 * 8)).map(|s| (s, 4)).map_err(ReadMKVError::Io)}
+        Ok(4) => {r.read(3 + (4 * 8)).map(|s| (s, 5)).map_err(ReadMKVError::Io)}
+        Ok(5) => {r.read(2 + (5 * 8)).map(|s| (s, 6)).map_err(ReadMKVError::Io)}
+        Ok(6) => {r.read(1 + (6 * 8)).map(|s| (s, 7)).map_err(ReadMKVError::Io)}
+        Ok(7) => {r.read(0 + (7 * 8)).map(|s| (s, 8)).map_err(ReadMKVError::Io)}
         Ok(_) => {Err(ReadMKVError::InvalidSize)}
         Err(err) => {Err(ReadMKVError::Io(err))}
     }
 }
 
-pub fn read_int(r: &mut io::Read, size: u64) -> Result<i64,ReadMKVError> {
+pub fn read_int(r: &mut BitReader<BE>, size: u64) ->
+    Result<i64,ReadMKVError> {
     match size {
         0 => {Ok(0)}
         s @ 1...8 => {
-            let mut r = BitReader::<BE>::new(r);
             r.read_signed(s as u32 * 8).map_err(ReadMKVError::Io)
         }
         _ => {Err(ReadMKVError::InvalidUint)}
     }
 }
 
-pub fn read_uint(r: &mut io::Read, size: u64) -> Result<u64,ReadMKVError> {
+pub fn read_uint(r: &mut BitReader<BE>, size: u64) ->
+    Result<u64,ReadMKVError> {
     match size {
         0 => {Ok(0)}
         s @ 1...8 => {
-            let mut r = BitReader::<BE>::new(r);
             r.read(s as u32 * 8).map_err(ReadMKVError::Io)
         }
         _ => {Err(ReadMKVError::InvalidUint)}
     }
 }
 
-pub fn read_float(r: &mut io::Read, size: u64) -> Result<f64,ReadMKVError> {
+pub fn read_float(r: &mut BitReader<BE>, size: u64) ->
+    Result<f64,ReadMKVError> {
     match size {
         0 => {Ok(0.0)}
         4 => {read_bin(r, 4).map(|_| 0.0) /*FIXME*/}
@@ -94,145 +243,25 @@ pub fn read_float(r: &mut io::Read, size: u64) -> Result<f64,ReadMKVError> {
     }
 }
 
-pub fn read_utf8(r: &mut io::Read, size: u64) -> Result<String,ReadMKVError> {
+pub fn read_utf8(r: &mut BitReader<BE>, size: u64) ->
+    Result<String,ReadMKVError> {
     read_bin(r, size).and_then(
         |bytes| String::from_utf8(bytes).map_err(ReadMKVError::UTF8))
 }
 
 /*FIXME - have this return proper date value*/
-pub fn read_date(r: &mut io::Read, size: u64) -> Result<(),ReadMKVError> {
+pub fn read_date(r: &mut BitReader<BE>, size: u64) -> Result<i64,ReadMKVError> {
     if size == 8 {
-        read_int(r, size).map(|_| ())
+        read_int(r, size)
     } else {
         Err(ReadMKVError::InvalidDate)
     }
 }
 
-pub fn read_bin(r: &mut io::Read, size: u64) -> Result<Vec<u8>,ReadMKVError> {
+pub fn read_bin(r: &mut BitReader<BE>, size: u64) ->
+    Result<Vec<u8>,ReadMKVError> {
     /*FIXME - need to read this in chunks*/
     let mut buf = Vec::with_capacity(size as usize);
     buf.resize(size as usize, 0);
-    r.read_exact(&mut buf).map(|()| buf).map_err(ReadMKVError::Io)
-}
-
-pub struct LimitedReader<'a> {
-    reader: &'a mut File,
-    length: usize
-}
-
-impl<'a> LimitedReader<'a> {
-    #[inline]
-    pub fn new(reader: &mut File, length: u64) -> LimitedReader {
-        LimitedReader{reader: reader, length: length as usize}
-    }
-
-    #[inline]
-    pub fn empty(&self) -> bool {
-        self.length == 0
-    }
-
-    pub fn skip(&mut self, bytes: usize) -> Result<(),io::Error> {
-        /*FIXME - have this skip data*/
-        use std::cmp::min;
-        use std::io::Seek;
-        use std::io::SeekFrom;
-
-        let bytes = min(bytes, self.length);
-        self.length -= bytes;
-        self.reader.seek(SeekFrom::Current(bytes as i64)).map(|_| ())
-    }
-}
-
-impl<'a> io::Read for LimitedReader<'a> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize,io::Error> {
-        use std::cmp::min;
-
-        let to_read = min(self.length, buf.len());
-        self.length -= to_read;
-        self.reader.read(&mut buf[0..to_read])
-    }
-}
-
-#[derive(Debug)]
-pub struct EBMLHeader {
-    pub version: u64,
-    pub read_version: u64,
-    pub max_id_length: u64,
-    pub max_size_length: u64,
-    pub doc_type: String,
-    pub doc_type_version: u64,
-    pub doc_type_read_version: u64
-}
-
-impl EBMLHeader {
-    pub fn new() -> EBMLHeader {
-        EBMLHeader{version: 1,
-                   read_version: 1,
-                   max_id_length: 4,
-                   max_size_length: 8,
-                   doc_type: "matroska".to_string(),
-                   doc_type_version: 1,
-                   doc_type_read_version: 1}
-    }
-
-    pub fn parse(reader: &mut File) -> Result<EBMLHeader,ReadMKVError> {
-        let id = read_element_id(reader)?;
-        if id != 0x1A45DFA3 {
-            return Err(ReadMKVError::UnexpectedID(id));
-        }
-        let size = read_element_size(reader)?;
-        let mut reader = LimitedReader::new(reader, size);
-        let mut header = EBMLHeader::new();
-        while !reader.empty() {
-            let id = read_element_id(&mut reader)?;
-            let size = read_element_size(&mut reader)?;
-            match id {
-                0x4286 => {header.version = read_uint(&mut reader, size)?;}
-                0x42F7 => {header.read_version = read_uint(&mut reader, size)?;}
-                0x42F2 => {header.max_id_length =
-                    read_uint(&mut reader, size)?;}
-                0x42F3 => {header.max_size_length =
-                    read_uint(&mut reader, size)?;}
-                0x4282 => {header.doc_type =
-                    read_utf8(&mut reader, size)?;}
-                0x4287 => {header.doc_type_version =
-                    read_uint(&mut reader, size)?;}
-                0x4285 => {header.doc_type_read_version =
-                    read_uint(&mut reader, size)?;}
-                _ => {return Err(ReadMKVError::UnexpectedID(id));}
-            }
-        }
-        Ok(header)
-    }
-}
-
-#[derive(Debug)]
-pub struct Segment {
-    /*FIXME*/
-}
-
-impl Segment {
-    pub fn new() -> Segment {
-        Segment{/*FIXME*/}
-    }
-
-    pub fn parse(reader: &mut File) -> Result<Segment,ReadMKVError> {
-        let id = read_element_id(reader)?;
-        if id != 0x18538067 {
-            return Err(ReadMKVError::UnexpectedID(id));
-        }
-        let size = read_element_size(reader)?;
-        let mut reader = LimitedReader::new(reader, size);
-        let segment = Segment::new();
-        while !reader.empty() {
-            let id = read_element_id(&mut reader)?;
-            let size = read_element_size(&mut reader)?;
-            reader.skip(size as usize).map_err(ReadMKVError::Io)?;
-            println!("segment ID : {:X}", id);
-            //match id {
-            //    /*FIXME - implement this*/
-            //}
-        }
-        Ok(segment)
-    }
+    r.read_bytes(&mut buf).map(|()| buf).map_err(ReadMKVError::Io)
 }
