@@ -1,7 +1,8 @@
 [package]
 name = "mkv"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Brian Langenberger <bjl@usa.net>"]
 
 [dependencies]
 bitstream-io = {path="../bitstream-io"}
+chrono = "0.4"
