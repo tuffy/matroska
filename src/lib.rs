@@ -14,8 +14,7 @@ use chrono::offset::Utc;
 pub struct MKV {
     pub info: Info,
     pub tracks: Vec<Track>,
-    //pub chapters: Vec<Chapter>,
-    //pub tags: Vec<Tag>
+    pub attachments: Vec<Attachment>
 }
 
 #[derive(Debug)]
@@ -26,7 +25,8 @@ pub enum ReadMKVError {
 impl MKV {
     pub fn new() -> MKV {
         MKV{info: Info::new(),
-            tracks: Vec::new()}
+            tracks: Vec::new(),
+            attachments: Vec::new()}
     }
 
     pub fn open(mut file: File) -> Result<MKV,ReadMKVError> {
@@ -58,8 +58,11 @@ impl MKV {
                 ids::TRACKS => {
                     mkv.tracks = Track::parse(&mut file, size_1)?;
                 }
+                ids::ATTACHMENTS => {
+                    mkv.attachments = Attachment::parse(&mut file, size_1)?;
+                }
                 _ => {
-                    println!("level1 : {:X} {}", id_1, size_1);
+                    //println!("level1 : {:X} {}", id_1, size_1);
                     file.seek(SeekFrom::Current(size_1 as i64))
                         .map(|_| ())
                         .unwrap();
@@ -76,22 +79,22 @@ impl MKV {
 #[derive(Debug)]
 pub struct Info {
     pub title: Option<String>,
-    pub duration: Option<f64>,
+    pub duration: Option<Duration>,
     pub date_utc: Option<DateTime<Utc>>,
-    pub muxing_app: Option<String>,
-    pub writing_app: Option<String>
+    pub muxing_app: String,
+    pub writing_app: String
 }
 
 impl Info {
-    pub fn new() -> Info {
+    fn new() -> Info {
         Info{title: None,
              duration: None,
              date_utc: None,
-             muxing_app: None,
-             writing_app: None}
+             muxing_app: String::new(),
+             writing_app: String::new()}
     }
 
-    pub fn parse(r: &mut io::Read, mut size: u64) -> Result<Info,ReadMKVError> {
+    fn parse(r: &mut io::Read, mut size: u64) -> Result<Info,ReadMKVError> {
         let mut info = Info::new();
         let mut timecode_scale = None;
         let mut duration = None;
@@ -113,10 +116,10 @@ impl Info {
                     info.date_utc = Some(ebml::read_date(r, s).unwrap());
                 }
                 ids::MUXINGAPP => {
-                    info.muxing_app = Some(ebml::read_utf8(r, s).unwrap());
+                    info.muxing_app = ebml::read_utf8(r, s).unwrap();
                 }
                 ids::WRITINGAPP => {
-                    info.writing_app = Some(ebml::read_utf8(r, s).unwrap());
+                    info.writing_app = ebml::read_utf8(r, s).unwrap();
                 }
                 _ => {ebml::read_bin(r, s).unwrap();}
             }
@@ -126,7 +129,8 @@ impl Info {
 
         if let Some(d) = duration {
             if let Some(t) = timecode_scale {
-                info.duration = Some((d * t as f64) / 1_000_000_000.0)
+                info.duration = Some(
+                    Duration::nanoseconds((d * t as f64) as i64))
             }
         }
         Ok(info)
@@ -135,10 +139,11 @@ impl Info {
 
 #[derive(Debug)]
 pub struct Video {
-    pixel_width: u64,
-    pixel_height: u64,
-    display_width: u64,
-    display_height: u64
+    /*FIXME - handle optional parameters?*/
+    pub pixel_width: u64,
+    pub pixel_height: u64,
+    pub display_width: u64,
+    pub display_height: u64
 }
 
 impl Video {
@@ -184,9 +189,10 @@ impl Video {
 
 #[derive(Debug)]
 pub struct Audio {
-    sample_rate: f64,
-    channels: u64,
-    bit_depth: u64
+    /*FIXME - handle optional parameters?*/
+    pub sample_rate: f64,
+    pub channels: u64,
+    pub bit_depth: u64
 }
 
 impl Audio {
@@ -235,20 +241,21 @@ pub enum Settings {
 
 #[derive(Debug)]
 pub struct Track {
-    number: u64,
-    uid: u64,
-    tracktype: u64, /*FIXME - make enum?*/
-    enabled: bool,
-    default: bool,
-    forced: bool,
-    interlaced: bool,
-    defaultduration: Duration,
-    offset: i64,
-    name: String,
-    language: String,
-    codec_id: String,
-    codec_name: String,
-    settings: Settings
+    /*FIXME - handle optional parameters?*/
+    pub number: u64,
+    pub uid: u64,
+    pub tracktype: u64, /*FIXME - make enum?*/
+    pub enabled: bool,
+    pub default: bool,
+    pub forced: bool,
+    pub interlaced: bool,
+    pub defaultduration: Duration,
+    pub offset: i64,
+    pub name: String,
+    pub language: String,
+    pub codec_id: String,
+    pub codec_name: String,
+    pub settings: Settings
 }
 
 impl Track {
@@ -269,7 +276,7 @@ impl Track {
               settings: Settings::None}
     }
 
-    pub fn parse(r: &mut io::Read, mut size: u64) ->
+    fn parse(r: &mut io::Read, mut size: u64) ->
         Result<Vec<Track>,ReadMKVError> {
         let mut tracks = Vec::new();
 
@@ -342,7 +349,7 @@ impl Track {
                     track.settings = Settings::Audio(Audio::parse(r, s)?);
                 }
                 _ => {
-                    println!("track entry : {:X} {}", i, s);
+                    //println!("track entry : {:X} {}", i, s);
                     let _ = ebml::read_bin(r, s).unwrap();
                 }
             }
@@ -354,10 +361,72 @@ impl Track {
     }
 }
 
-//pub struct Chapter {
-//    /*FIXME*/
-//}
-//
-//pub struct Tag {
-//    /*FIXME*/
-//}
+#[derive(Debug)]
+pub struct Attachment {
+    /*FIXME - handle optional parameters?*/
+    pub description: String,
+    pub name: String,
+    pub mime_type: String,
+    pub data: Vec<u8>
+}
+
+impl Attachment {
+    fn new() -> Attachment {
+        Attachment{description: String::new(),
+                   name: String::new(),
+                   mime_type: String::new(),
+                   data: Vec::new()}
+    }
+
+    fn parse(r: &mut io::Read, mut size: u64) ->
+        Result<Vec<Attachment>,ReadMKVError> {
+        let mut attachments = Vec::new();
+
+        while size > 0 {
+            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+
+            if i == ids::ATTACHEDFILE {
+                attachments.push(Attachment::parse_entry(r, s)?);
+            } else {
+                let _ = ebml::read_bin(r, s);
+            }
+
+            size -= len;
+            size -= s;
+        }
+
+        Ok(attachments)
+    }
+
+    fn parse_entry(r: &mut io::Read, mut size: u64) ->
+        Result<Attachment,ReadMKVError> {
+        let mut attachment = Attachment::new();
+
+        while size > 0 {
+            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+
+            match i {
+                ids::FILEDESCRIPTION => {
+                    attachment.description = ebml::read_utf8(r, s).unwrap();
+                }
+                ids::FILENAME => {
+                    attachment.name = ebml::read_utf8(r, s).unwrap();
+                }
+                ids::FILEMIMETYPE => {
+                    attachment.mime_type = ebml::read_string(r, s).unwrap();
+                }
+                ids::FILEDATA => {
+                    attachment.data = ebml::read_bin(r, s).unwrap();
+                }
+                _ => {
+                    let _ = ebml::read_bin(r, s).unwrap();
+                }
+            }
+
+            size -= len;
+            size -= s;
+        }
+
+        Ok(attachment)
+    }
+}
