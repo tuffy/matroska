@@ -7,15 +7,13 @@ extern crate chrono;
 mod ebml;
 mod ids;
 
-use chrono::DateTime;
+use chrono::{DateTime, Duration};
 use chrono::offset::Utc;
 
 #[derive(Debug)]
 pub struct MKV {
     pub info: Info,
-    //pub tracks_video: Vec<Video>,
-    //pub tracks_audio: Vec<Audio>,
-    //pub tracks_subtitle: Vec<Subtitle>,
+    pub tracks: Vec<Track>,
     //pub chapters: Vec<Chapter>,
     //pub tags: Vec<Tag>
 }
@@ -27,7 +25,8 @@ pub enum ReadMKVError {
 
 impl MKV {
     pub fn new() -> MKV {
-        MKV{info: Info::new()}
+        MKV{info: Info::new(),
+            tracks: Vec::new()}
     }
 
     pub fn open(mut file: File) -> Result<MKV,ReadMKVError> {
@@ -42,22 +41,25 @@ impl MKV {
             ebml::read_element_id_size(&mut file).unwrap();
         while id_0 != ids::SEGMENT {
             file.seek(SeekFrom::Current(size_0 as i64)).map(|_| ()).unwrap();
-            let t = ebml::read_element_id_size(&mut file).unwrap();
-            id_0 = t.0;
-            size_0 = t.1;
+            let (id, size, _) = ebml::read_element_id_size(&mut file).unwrap();
+            id_0 = id;
+            size_0 = size;
         }
 
         // pull out useful pieces from Segment
         while size_0 > 0 {
             let (id_1, size_1, len) =
                 ebml::read_element_id_size(&mut file).unwrap();
-            println!("level1 : {:X} {}", id_1, size_1);
             /*FIXME - implement extraction*/
             match id_1 {
                 ids::INFO => {
                     mkv.info = Info::parse(&mut file, size_1)?;
                 }
+                ids::TRACKS => {
+                    mkv.tracks = Track::parse(&mut file, size_1)?;
+                }
                 _ => {
+                    println!("level1 : {:X} {}", id_1, size_1);
                     file.seek(SeekFrom::Current(size_1 as i64))
                         .map(|_| ())
                         .unwrap();
@@ -95,6 +97,7 @@ impl Info {
         let mut duration = None;
 
         while size > 0 {
+            /*FIXME - improve error handling*/
             let (i, s, len) = ebml::read_element_id_size(r).unwrap();
             match i {
                 ids::TITLE => {
@@ -130,18 +133,227 @@ impl Info {
     }
 }
 
-//pub struct Video {
-//    /*FIXME*/
-//}
-//
-//pub struct Audio {
-//    /*FIXME*/
-//}
-//
-//pub struct Subtitle {
-//    /*FIXME*/
-//}
-//
+#[derive(Debug)]
+pub struct Video {
+    pixel_width: u64,
+    pixel_height: u64,
+    display_width: u64,
+    display_height: u64
+}
+
+impl Video {
+    fn new() -> Video {
+        Video{pixel_width: 0,
+              pixel_height: 0,
+              display_width: 0,
+              display_height: 0}
+    }
+
+    fn parse(r: &mut io::Read, mut size: u64) -> Result<Video,ReadMKVError> {
+        let mut video = Video::new();
+
+        while size > 0 {
+            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+
+            match i {
+                ids::PIXELWIDTH => {
+                    video.pixel_width = ebml::read_uint(r, s).unwrap();
+                }
+                ids::PIXELHEIGHT => {
+                    video.pixel_height = ebml::read_uint(r, s).unwrap();
+                }
+                ids::DISPLAYWIDTH => {
+                    video.display_width = ebml::read_uint(r, s).unwrap();
+                }
+                ids::DISPLAYHEIGHT => {
+                    video.display_height = ebml::read_uint(r, s).unwrap();
+                }
+                _ => {
+                    println!("video : {:X} {}", i, s);
+                    let _ = ebml::read_bin(r, s).unwrap();
+                }
+            }
+
+            size -= len;
+            size -= s;
+        }
+
+        Ok(video)
+    }
+}
+
+#[derive(Debug)]
+pub struct Audio {
+    sample_rate: f64,
+    channels: u64,
+    bit_depth: u64
+}
+
+impl Audio {
+    fn new() -> Audio {
+        Audio{sample_rate: 0.0,
+              channels: 0,
+              bit_depth: 0}
+    }
+
+    fn parse(r: &mut io::Read, mut size: u64) -> Result<Audio,ReadMKVError> {
+        let mut audio = Audio::new();
+
+        while size > 0 {
+            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+
+            match i {
+                ids::SAMPLINGFREQUENCY => {
+                    audio.sample_rate = ebml::read_float(r, s).unwrap();
+                }
+                ids::CHANNELS => {
+                    audio.channels = ebml::read_uint(r, s).unwrap();
+                }
+                ids::BITDEPTH => {
+                    audio.bit_depth = ebml::read_uint(r, s).unwrap();
+                }
+                _ => {
+                    println!("audio track : {:X} {}", i, s);
+                    let _ = ebml::read_bin(r, s).unwrap();
+                }
+            }
+
+            size -= len;
+            size -= s;
+        }
+
+        Ok(audio)
+    }
+}
+
+#[derive(Debug)]
+pub enum Settings {
+    None,
+    Video(Video),
+    Audio(Audio)
+}
+
+#[derive(Debug)]
+pub struct Track {
+    number: u64,
+    uid: u64,
+    tracktype: u64, /*FIXME - make enum?*/
+    enabled: bool,
+    default: bool,
+    forced: bool,
+    interlaced: bool,
+    defaultduration: Duration,
+    offset: i64,
+    name: String,
+    language: String,
+    codec_id: String,
+    codec_name: String,
+    settings: Settings
+}
+
+impl Track {
+    fn new() -> Track {
+        Track{number: 0,
+              uid: 0,
+              tracktype: 0,
+              enabled: true,
+              default: true,
+              forced: false,
+              interlaced: true,
+              defaultduration: Duration::nanoseconds(0),
+              offset: 0,
+              name: String::new(),
+              language: String::new(),
+              codec_name: String::new(),
+              codec_id: String::new(),
+              settings: Settings::None}
+    }
+
+    pub fn parse(r: &mut io::Read, mut size: u64) ->
+        Result<Vec<Track>,ReadMKVError> {
+        let mut tracks = Vec::new();
+
+        while size > 0 {
+            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+            if i == ids::TRACKENTRY {
+                tracks.push(Track::parse_entry(r, s)?);
+            } else {
+                let _ = ebml::read_bin(r, s).unwrap();
+            }
+
+            size -= len;
+            size -= s;
+        }
+        Ok(tracks)
+    }
+
+    fn parse_entry(r: &mut io::Read, mut size: u64) ->
+        Result<Track,ReadMKVError> {
+        let mut track = Track::new();
+        while size > 0 {
+            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+
+            match i {
+                ids::TRACKNUMBER => {
+                    track.number = ebml::read_uint(r, s).unwrap();
+                }
+                ids::TRACKUID => {
+                    track.uid = ebml::read_uint(r, s).unwrap();
+                }
+                ids::TRACKTYPE => {
+                    track.tracktype = ebml::read_uint(r, s).unwrap();
+                }
+                ids::FLAGENABLED => {
+                    track.enabled = ebml::read_uint(r, s).unwrap() != 0;
+                }
+                ids::FLAGDEFAULT => {
+                    track.default = ebml::read_uint(r, s).unwrap() != 0;
+                }
+                ids::FLAGFORCED => {
+                    track.forced = ebml::read_uint(r, s).unwrap() != 0;
+                }
+                ids::FLAGLACING => {
+                    track.interlaced = ebml::read_uint(r, s).unwrap() != 0;
+                }
+                ids::DEFAULTDURATION => {
+                    track.defaultduration =
+                        Duration::nanoseconds(
+                            ebml::read_uint(r, s).unwrap() as i64);
+                }
+                ids::TRACKOFFSET => {
+                    track.offset = ebml::read_int(r, s).unwrap();
+                }
+                ids::NAME => {
+                    track.name = ebml::read_utf8(r, s).unwrap();
+                }
+                ids::LANGUAGE => {
+                    track.language = ebml::read_string(r, s).unwrap()
+                }
+                ids::CODEC_ID => {
+                    track.codec_id = ebml::read_string(r, s).unwrap();
+                }
+                ids::CODEC_NAME => {
+                    track.codec_name = ebml::read_utf8(r, s).unwrap();
+                }
+                ids::VIDEO => {
+                    track.settings = Settings::Video(Video::parse(r, s)?);
+                }
+                ids::AUDIO => {
+                    track.settings = Settings::Audio(Audio::parse(r, s)?);
+                }
+                _ => {
+                    println!("track entry : {:X} {}", i, s);
+                    let _ = ebml::read_bin(r, s).unwrap();
+                }
+            }
+
+            size -= len;
+            size -= s;
+        }
+        Ok(track)
+    }
+}
+
 //pub struct Chapter {
 //    /*FIXME*/
 //}
