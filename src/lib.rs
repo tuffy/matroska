@@ -126,7 +126,7 @@ impl Info {
                 ids::WRITINGAPP => {
                     info.writing_app = ebml::read_utf8(r, s).unwrap();
                 }
-                _ => {ebml::read_bin(r, s).unwrap();}
+                _ => {ebml::skip(r, s).unwrap();}
             }
             size -= len;
             size -= s;
@@ -177,10 +177,7 @@ impl Video {
                 ids::DISPLAYHEIGHT => {
                     video.display_height = Some(ebml::read_uint(r, s).unwrap());
                 }
-                _ => {
-                    println!("video : {:X} {}", i, s);
-                    let _ = ebml::read_bin(r, s).unwrap();
-                }
+                _ => {ebml::skip(r, s).unwrap();}
             }
 
             size -= len;
@@ -221,10 +218,7 @@ impl Audio {
                 ids::BITDEPTH => {
                     audio.bit_depth = Some(ebml::read_uint(r, s).unwrap());
                 }
-                _ => {
-                    println!("audio track : {:X} {}", i, s);
-                    let _ = ebml::read_bin(r, s).unwrap();
-                }
+                _ => {ebml::skip(r, s).unwrap();}
             }
 
             size -= len;
@@ -287,7 +281,7 @@ impl Track {
             if i == ids::TRACKENTRY {
                 tracks.push(Track::parse_entry(r, s)?);
             } else {
-                let _ = ebml::read_bin(r, s).unwrap();
+                ebml::skip(r, s).unwrap();
             }
 
             size -= len;
@@ -351,7 +345,7 @@ impl Track {
                     track.settings = Settings::Audio(Audio::parse(r, s)?);
                 }
                 _ => {
-                    let _ = ebml::read_bin(r, s).unwrap();
+                    ebml::skip(r, s).unwrap();
                 }
             }
 
@@ -388,7 +382,7 @@ impl Attachment {
             if i == ids::ATTACHEDFILE {
                 attachments.push(Attachment::parse_entry(r, s)?);
             } else {
-                let _ = ebml::read_bin(r, s);
+                let _ = ebml::skip(r, s);
             }
 
             size -= len;
@@ -420,7 +414,7 @@ impl Attachment {
                     attachment.data = ebml::read_bin(r, s).unwrap();
                 }
                 _ => {
-                    let _ = ebml::read_bin(r, s).unwrap();
+                    let _ = ebml::skip(r, s).unwrap();
                 }
             }
 
@@ -458,7 +452,7 @@ impl ChapterEdition {
             if i == ids::EDITIONENTRY {
                 chaptereditions.push(ChapterEdition::parse_entry(r, s)?);
             } else {
-                let _ = ebml::read_bin(r, s);
+                ebml::skip(r, s).unwrap();
             }
 
             size -= s;
@@ -493,7 +487,7 @@ impl ChapterEdition {
                     chapteredition.chapters.push(Chapter::parse(r, s)?)
                 }
                 _ => {
-                    let _ = ebml::read_bin(r, s).unwrap();
+                    ebml::skip(r, s).unwrap();
                 }
             }
 
@@ -550,7 +544,7 @@ impl Chapter {
                     chapter.display.push(ChapterDisplay::parse(r, s)?);
                 }
                 _ => {
-                    let _ = ebml::read_bin(r, s).unwrap();
+                    ebml::skip(r, s).unwrap();
                 }
             }
 
@@ -588,7 +582,7 @@ impl ChapterDisplay {
                     display.language = ebml::read_string(r, s).unwrap();
                 }
                 _ => {
-                    let _ = ebml::read_bin(r, s).unwrap();
+                    ebml::skip(r, s).unwrap();
                 }
             }
 
