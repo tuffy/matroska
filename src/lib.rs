@@ -144,19 +144,18 @@ impl Info {
 
 #[derive(Debug)]
 pub struct Video {
-    /*FIXME - handle optional parameters?*/
     pub pixel_width: u64,
     pub pixel_height: u64,
-    pub display_width: u64,
-    pub display_height: u64
+    pub display_width: Option<u64>,
+    pub display_height: Option<u64>
 }
 
 impl Video {
     fn new() -> Video {
         Video{pixel_width: 0,
               pixel_height: 0,
-              display_width: 0,
-              display_height: 0}
+              display_width: None,
+              display_height: None}
     }
 
     fn parse(r: &mut io::Read, mut size: u64) -> Result<Video,ReadMKVError> {
@@ -173,10 +172,10 @@ impl Video {
                     video.pixel_height = ebml::read_uint(r, s).unwrap();
                 }
                 ids::DISPLAYWIDTH => {
-                    video.display_width = ebml::read_uint(r, s).unwrap();
+                    video.display_width = Some(ebml::read_uint(r, s).unwrap());
                 }
                 ids::DISPLAYHEIGHT => {
-                    video.display_height = ebml::read_uint(r, s).unwrap();
+                    video.display_height = Some(ebml::read_uint(r, s).unwrap());
                 }
                 _ => {
                     println!("video : {:X} {}", i, s);
@@ -194,17 +193,16 @@ impl Video {
 
 #[derive(Debug)]
 pub struct Audio {
-    /*FIXME - handle optional parameters?*/
     pub sample_rate: f64,
     pub channels: u64,
-    pub bit_depth: u64
+    pub bit_depth: Option<u64>
 }
 
 impl Audio {
     fn new() -> Audio {
         Audio{sample_rate: 0.0,
               channels: 0,
-              bit_depth: 0}
+              bit_depth: None}
     }
 
     fn parse(r: &mut io::Read, mut size: u64) -> Result<Audio,ReadMKVError> {
@@ -221,7 +219,7 @@ impl Audio {
                     audio.channels = ebml::read_uint(r, s).unwrap();
                 }
                 ids::BITDEPTH => {
-                    audio.bit_depth = ebml::read_uint(r, s).unwrap();
+                    audio.bit_depth = Some(ebml::read_uint(r, s).unwrap());
                 }
                 _ => {
                     println!("audio track : {:X} {}", i, s);
@@ -246,7 +244,6 @@ pub enum Settings {
 
 #[derive(Debug)]
 pub struct Track {
-    /*FIXME - handle optional parameters?*/
     pub number: u64,
     pub uid: u64,
     pub tracktype: u64, /*FIXME - make enum?*/
@@ -254,12 +251,12 @@ pub struct Track {
     pub default: bool,
     pub forced: bool,
     pub interlaced: bool,
-    pub defaultduration: Duration,
-    pub offset: i64,
-    pub name: String,
-    pub language: String,
+    pub defaultduration: Option<Duration>,
+    pub offset: Option<i64>,
+    pub name: Option<String>,
+    pub language: Option<String>,
     pub codec_id: String,
-    pub codec_name: String,
+    pub codec_name: Option<String>,
     pub settings: Settings
 }
 
@@ -272,12 +269,12 @@ impl Track {
               default: true,
               forced: false,
               interlaced: true,
-              defaultduration: Duration::nanoseconds(0),
-              offset: 0,
-              name: String::new(),
-              language: String::new(),
-              codec_name: String::new(),
+              defaultduration: None,
+              offset: None,
+              name: None,
+              language: None,
               codec_id: String::new(),
+              codec_name: None,
               settings: Settings::None}
     }
 
@@ -329,23 +326,23 @@ impl Track {
                 }
                 ids::DEFAULTDURATION => {
                     track.defaultduration =
-                        Duration::nanoseconds(
-                            ebml::read_uint(r, s).unwrap() as i64);
+                        Some(Duration::nanoseconds(
+                            ebml::read_uint(r, s).unwrap() as i64));
                 }
                 ids::TRACKOFFSET => {
-                    track.offset = ebml::read_int(r, s).unwrap();
+                    track.offset = Some(ebml::read_int(r, s).unwrap());
                 }
                 ids::NAME => {
-                    track.name = ebml::read_utf8(r, s).unwrap();
+                    track.name = Some(ebml::read_utf8(r, s).unwrap());
                 }
                 ids::LANGUAGE => {
-                    track.language = ebml::read_string(r, s).unwrap()
+                    track.language = Some(ebml::read_string(r, s).unwrap());
                 }
                 ids::CODEC_ID => {
                     track.codec_id = ebml::read_string(r, s).unwrap();
                 }
                 ids::CODEC_NAME => {
-                    track.codec_name = ebml::read_utf8(r, s).unwrap();
+                    track.codec_name = Some(ebml::read_utf8(r, s).unwrap());
                 }
                 ids::VIDEO => {
                     track.settings = Settings::Video(Video::parse(r, s)?);
@@ -354,7 +351,6 @@ impl Track {
                     track.settings = Settings::Audio(Audio::parse(r, s)?);
                 }
                 _ => {
-                    //println!("track entry : {:X} {}", i, s);
                     let _ = ebml::read_bin(r, s).unwrap();
                 }
             }
@@ -368,8 +364,7 @@ impl Track {
 
 #[derive(Debug)]
 pub struct Attachment {
-    /*FIXME - handle optional parameters?*/
-    pub description: String,
+    pub description: Option<String>,
     pub name: String,
     pub mime_type: String,
     pub data: Vec<u8>
@@ -377,7 +372,7 @@ pub struct Attachment {
 
 impl Attachment {
     fn new() -> Attachment {
-        Attachment{description: String::new(),
+        Attachment{description: None,
                    name: String::new(),
                    mime_type: String::new(),
                    data: Vec::new()}
@@ -412,7 +407,8 @@ impl Attachment {
 
             match i {
                 ids::FILEDESCRIPTION => {
-                    attachment.description = ebml::read_utf8(r, s).unwrap();
+                    attachment.description =
+                        Some(ebml::read_utf8(r, s).unwrap());
                 }
                 ids::FILENAME => {
                     attachment.name = ebml::read_utf8(r, s).unwrap();
