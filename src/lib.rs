@@ -14,7 +14,8 @@ use chrono::offset::Utc;
 pub struct MKV {
     pub info: Info,
     pub tracks: Vec<Track>,
-    pub attachments: Vec<Attachment>
+    pub attachments: Vec<Attachment>,
+    pub chapters: Vec<ChapterEdition>
 }
 
 #[derive(Debug)]
@@ -26,7 +27,8 @@ impl MKV {
     pub fn new() -> MKV {
         MKV{info: Info::new(),
             tracks: Vec::new(),
-            attachments: Vec::new()}
+            attachments: Vec::new(),
+            chapters: Vec::new()}
     }
 
     pub fn open(mut file: File) -> Result<MKV,ReadMKVError> {
@@ -60,6 +62,9 @@ impl MKV {
                 }
                 ids::ATTACHMENTS => {
                     mkv.attachments = Attachment::parse(&mut file, size_1)?;
+                }
+                ids::CHAPTERS => {
+                    mkv.chapters = ChapterEdition::parse(&mut file, size_1)?;
                 }
                 _ => {
                     //println!("level1 : {:X} {}", id_1, size_1);
@@ -428,5 +433,173 @@ impl Attachment {
         }
 
         Ok(attachment)
+    }
+}
+
+#[derive(Debug)]
+pub struct ChapterEdition {
+    pub hidden: bool,
+    pub default: bool,
+    pub ordered: bool,
+    pub chapters: Vec<Chapter>
+}
+
+impl ChapterEdition {
+    fn new() -> ChapterEdition {
+        ChapterEdition{hidden: false,
+                       default: false,
+                       ordered: false,
+                       chapters: Vec::new()}
+    }
+
+    fn parse(r: &mut io::Read, mut size: u64) ->
+        Result<Vec<ChapterEdition>,ReadMKVError> {
+        let mut chaptereditions = Vec::new();
+
+        while size > 0 {
+            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+
+            if i == ids::EDITIONENTRY {
+                chaptereditions.push(ChapterEdition::parse_entry(r, s)?);
+            } else {
+                let _ = ebml::read_bin(r, s);
+            }
+
+            size -= s;
+            size -= len;
+        }
+
+        Ok(chaptereditions)
+    }
+
+    fn parse_entry(r: &mut io::Read, mut size: u64) ->
+        Result<ChapterEdition,ReadMKVError> {
+
+        let mut chapteredition = ChapterEdition::new();
+
+        while size > 0 {
+            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+
+            match i {
+                ids::EDITIONFLAGHIDDEN => {
+                    chapteredition.hidden =
+                        ebml::read_uint(r, s).unwrap() != 0;
+                }
+                ids::EDITIONFLAGDEFAULT => {
+                    chapteredition.default =
+                        ebml::read_uint(r, s).unwrap() != 0;
+                }
+                ids::EDITIONFLAGORDERED => {
+                    chapteredition.ordered =
+                        ebml::read_uint(r, s).unwrap() != 0;
+                }
+                ids::CHAPTERATOM => {
+                    chapteredition.chapters.push(Chapter::parse(r, s)?)
+                }
+                _ => {
+                    let _ = ebml::read_bin(r, s).unwrap();
+                }
+            }
+
+            size -= s;
+            size -= len;
+        }
+
+        Ok(chapteredition)
+    }
+}
+
+#[derive(Debug)]
+pub struct Chapter {
+    pub time_start: Duration,
+    pub time_end: Option<Duration>,
+    pub hidden: bool,
+    pub enabled: bool,
+    pub display: Vec<ChapterDisplay>
+}
+
+impl Chapter {
+    fn new() -> Chapter {
+        Chapter{time_start: Duration::nanoseconds(0),
+                time_end: None,
+                hidden: false,
+                enabled: false,
+                display: Vec::new()}
+    }
+
+    fn parse(r: &mut io::Read, mut size: u64) -> Result<Chapter,ReadMKVError> {
+        let mut chapter = Chapter::new();
+
+        while size > 0 {
+            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+
+            match i {
+                ids::CHAPTERTIMESTART => {
+                    chapter.time_start =
+                        Duration::nanoseconds(
+                            ebml::read_uint(r, s).unwrap() as i64);
+                }
+                ids::CHAPTERTIMEEND => {
+                    chapter.time_end =
+                        Some(Duration::nanoseconds(
+                            ebml::read_uint(r, s).unwrap() as i64));
+                }
+                ids::CHAPTERFLAGHIDDEN => {
+                    chapter.hidden = ebml::read_uint(r, s).unwrap() != 0;
+                }
+                ids::CHAPTERFLAGENABLED => {
+                    chapter.enabled = ebml::read_uint(r, s).unwrap() != 0;
+                }
+                ids::CHAPTERDISPLAY => {
+                    chapter.display.push(ChapterDisplay::parse(r, s)?);
+                }
+                _ => {
+                    let _ = ebml::read_bin(r, s).unwrap();
+                }
+            }
+
+            size -= s;
+            size -= len;
+        }
+
+        Ok(chapter)
+    }
+}
+
+#[derive(Debug)]
+pub struct ChapterDisplay {
+    pub string: String,
+    pub language: String
+}
+
+impl ChapterDisplay {
+    fn new() -> ChapterDisplay {
+        ChapterDisplay{string: String::new(), language: String::new()}
+    }
+
+    fn parse(r: &mut io::Read, mut size: u64) ->
+        Result<ChapterDisplay,ReadMKVError> {
+        let mut display = ChapterDisplay::new();
+
+        while size > 0 {
+            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+
+            match i {
+                ids::CHAPSTRING => {
+                    display.string = ebml::read_utf8(r, s).unwrap();
+                }
+                ids::CHAPLANGUAGE => {
+                    display.language = ebml::read_string(r, s).unwrap();
+                }
+                _ => {
+                    let _ = ebml::read_bin(r, s).unwrap();
+                }
+            }
+
+            size -= s;
+            size -= len;
+        }
+
+        Ok(display)
     }
 }
