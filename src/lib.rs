@@ -10,17 +10,14 @@ mod ids;
 use chrono::{DateTime, Duration};
 use chrono::offset::Utc;
 
+use ebml::MKVError;
+
 #[derive(Debug)]
 pub struct MKV {
     pub info: Info,
     pub tracks: Vec<Track>,
     pub attachments: Vec<Attachment>,
     pub chapters: Vec<ChapterEdition>
-}
-
-#[derive(Debug)]
-pub enum ReadMKVError {
-    Io(io::Error)
 }
 
 impl MKV {
@@ -31,7 +28,7 @@ impl MKV {
             chapters: Vec::new()}
     }
 
-    pub fn open(mut file: File) -> Result<MKV,ReadMKVError> {
+    pub fn open(mut file: File) -> Result<MKV,MKVError> {
         use std::io::Seek;
         use std::io::SeekFrom;
 
@@ -39,20 +36,19 @@ impl MKV {
 
         // look for first Segment in stream
         /*FIXME - clean this up*/
-        let (mut id_0, mut size_0, _) =
-            ebml::read_element_id_size(&mut file).unwrap();
+        let (mut id_0, mut size_0, _) = ebml::read_element_id_size(&mut file)?;
         while id_0 != ids::SEGMENT {
-            file.seek(SeekFrom::Current(size_0 as i64)).map(|_| ()).unwrap();
-            let (id, size, _) = ebml::read_element_id_size(&mut file).unwrap();
+            file.seek(SeekFrom::Current(size_0 as i64))
+                .map(|_| ())
+                .map_err(MKVError::Io)?;
+            let (id, size, _) = ebml::read_element_id_size(&mut file)?;
             id_0 = id;
             size_0 = size;
         }
 
         // pull out useful pieces from Segment
         while size_0 > 0 {
-            let (id_1, size_1, len) =
-                ebml::read_element_id_size(&mut file).unwrap();
-            /*FIXME - implement extraction*/
+            let (id_1, size_1, len) = ebml::read_element_id_size(&mut file)?;
             match id_1 {
                 ids::INFO => {
                     mkv.info = Info::parse(&mut file, size_1)?;
@@ -67,10 +63,9 @@ impl MKV {
                     mkv.chapters = ChapterEdition::parse(&mut file, size_1)?;
                 }
                 _ => {
-                    //println!("level1 : {:X} {}", id_1, size_1);
                     file.seek(SeekFrom::Current(size_1 as i64))
                         .map(|_| ())
-                        .unwrap();
+                        .map_err(MKVError::Io)?;
                 }
             }
             size_0 -= len;
@@ -99,34 +94,33 @@ impl Info {
              writing_app: String::new()}
     }
 
-    fn parse(r: &mut io::Read, mut size: u64) -> Result<Info,ReadMKVError> {
+    fn parse(r: &mut io::Read, mut size: u64) -> Result<Info,MKVError> {
         let mut info = Info::new();
         let mut timecode_scale = None;
         let mut duration = None;
 
         while size > 0 {
-            /*FIXME - improve error handling*/
-            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+            let (i, s, len) = ebml::read_element_id_size(r)?;
             match i {
                 ids::TITLE => {
-                    info.title = Some(ebml::read_utf8(r, s).unwrap());
+                    info.title = Some(ebml::read_utf8(r, s)?);
                 }
                 ids::TIMECODESCALE => {
-                    timecode_scale = Some(ebml::read_uint(r, s).unwrap());
+                    timecode_scale = Some(ebml::read_uint(r, s)?);
                 }
                 ids::DURATION => {
-                    duration = Some(ebml::read_float(r, s).unwrap());
+                    duration = Some(ebml::read_float(r, s)?);
                 }
                 ids::DATEUTC => {
-                    info.date_utc = Some(ebml::read_date(r, s).unwrap());
+                    info.date_utc = Some(ebml::read_date(r, s)?);
                 }
                 ids::MUXINGAPP => {
-                    info.muxing_app = ebml::read_utf8(r, s).unwrap();
+                    info.muxing_app = ebml::read_utf8(r, s)?;
                 }
                 ids::WRITINGAPP => {
-                    info.writing_app = ebml::read_utf8(r, s).unwrap();
+                    info.writing_app = ebml::read_utf8(r, s)?;
                 }
-                _ => {ebml::skip(r, s).unwrap();}
+                _ => {ebml::skip(r, s)?;}
             }
             size -= len;
             size -= s;
@@ -138,6 +132,7 @@ impl Info {
                     Duration::nanoseconds((d * t as f64) as i64))
             }
         }
+
         Ok(info)
     }
 }
@@ -158,26 +153,26 @@ impl Video {
               display_height: None}
     }
 
-    fn parse(r: &mut io::Read, mut size: u64) -> Result<Video,ReadMKVError> {
+    fn parse(r: &mut io::Read, mut size: u64) -> Result<Video,MKVError> {
         let mut video = Video::new();
 
         while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+            let (i, s, len) = ebml::read_element_id_size(r)?;
 
             match i {
                 ids::PIXELWIDTH => {
-                    video.pixel_width = ebml::read_uint(r, s).unwrap();
+                    video.pixel_width = ebml::read_uint(r, s)?;
                 }
                 ids::PIXELHEIGHT => {
-                    video.pixel_height = ebml::read_uint(r, s).unwrap();
+                    video.pixel_height = ebml::read_uint(r, s)?;
                 }
                 ids::DISPLAYWIDTH => {
-                    video.display_width = Some(ebml::read_uint(r, s).unwrap());
+                    video.display_width = Some(ebml::read_uint(r, s)?);
                 }
                 ids::DISPLAYHEIGHT => {
-                    video.display_height = Some(ebml::read_uint(r, s).unwrap());
+                    video.display_height = Some(ebml::read_uint(r, s)?);
                 }
-                _ => {ebml::skip(r, s).unwrap();}
+                _ => {ebml::skip(r, s)?;}
             }
 
             size -= len;
@@ -202,23 +197,23 @@ impl Audio {
               bit_depth: None}
     }
 
-    fn parse(r: &mut io::Read, mut size: u64) -> Result<Audio,ReadMKVError> {
+    fn parse(r: &mut io::Read, mut size: u64) -> Result<Audio,MKVError> {
         let mut audio = Audio::new();
 
         while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+            let (i, s, len) = ebml::read_element_id_size(r)?;
 
             match i {
                 ids::SAMPLINGFREQUENCY => {
-                    audio.sample_rate = ebml::read_float(r, s).unwrap();
+                    audio.sample_rate = ebml::read_float(r, s)?;
                 }
                 ids::CHANNELS => {
-                    audio.channels = ebml::read_uint(r, s).unwrap();
+                    audio.channels = ebml::read_uint(r, s)?;
                 }
                 ids::BITDEPTH => {
-                    audio.bit_depth = Some(ebml::read_uint(r, s).unwrap());
+                    audio.bit_depth = Some(ebml::read_uint(r, s)?);
                 }
-                _ => {ebml::skip(r, s).unwrap();}
+                _ => {ebml::skip(r, s)?;}
             }
 
             size -= len;
@@ -272,16 +267,15 @@ impl Track {
               settings: Settings::None}
     }
 
-    fn parse(r: &mut io::Read, mut size: u64) ->
-        Result<Vec<Track>,ReadMKVError> {
+    fn parse(r: &mut io::Read, mut size: u64) -> Result<Vec<Track>,MKVError> {
         let mut tracks = Vec::new();
 
         while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+            let (i, s, len) = ebml::read_element_id_size(r)?;
             if i == ids::TRACKENTRY {
                 tracks.push(Track::parse_entry(r, s)?);
             } else {
-                ebml::skip(r, s).unwrap();
+                ebml::skip(r, s)?;
             }
 
             size -= len;
@@ -290,53 +284,52 @@ impl Track {
         Ok(tracks)
     }
 
-    fn parse_entry(r: &mut io::Read, mut size: u64) ->
-        Result<Track,ReadMKVError> {
+    fn parse_entry(r: &mut io::Read, mut size: u64) -> Result<Track,MKVError> {
         let mut track = Track::new();
         while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+            let (i, s, len) = ebml::read_element_id_size(r)?;
 
             match i {
                 ids::TRACKNUMBER => {
-                    track.number = ebml::read_uint(r, s).unwrap();
+                    track.number = ebml::read_uint(r, s)?;
                 }
                 ids::TRACKUID => {
-                    track.uid = ebml::read_uint(r, s).unwrap();
+                    track.uid = ebml::read_uint(r, s)?;
                 }
                 ids::TRACKTYPE => {
-                    track.tracktype = ebml::read_uint(r, s).unwrap();
+                    track.tracktype = ebml::read_uint(r, s)?;
                 }
                 ids::FLAGENABLED => {
-                    track.enabled = ebml::read_uint(r, s).unwrap() != 0;
+                    track.enabled = ebml::read_uint(r, s)? != 0;
                 }
                 ids::FLAGDEFAULT => {
-                    track.default = ebml::read_uint(r, s).unwrap() != 0;
+                    track.default = ebml::read_uint(r, s)? != 0;
                 }
                 ids::FLAGFORCED => {
-                    track.forced = ebml::read_uint(r, s).unwrap() != 0;
+                    track.forced = ebml::read_uint(r, s)? != 0;
                 }
                 ids::FLAGLACING => {
-                    track.interlaced = ebml::read_uint(r, s).unwrap() != 0;
+                    track.interlaced = ebml::read_uint(r, s)? != 0;
                 }
                 ids::DEFAULTDURATION => {
                     track.defaultduration =
                         Some(Duration::nanoseconds(
-                            ebml::read_uint(r, s).unwrap() as i64));
+                            ebml::read_uint(r, s)? as i64));
                 }
                 ids::TRACKOFFSET => {
-                    track.offset = Some(ebml::read_int(r, s).unwrap());
+                    track.offset = Some(ebml::read_int(r, s)?);
                 }
                 ids::NAME => {
-                    track.name = Some(ebml::read_utf8(r, s).unwrap());
+                    track.name = Some(ebml::read_utf8(r, s)?);
                 }
                 ids::LANGUAGE => {
-                    track.language = Some(ebml::read_string(r, s).unwrap());
+                    track.language = Some(ebml::read_string(r, s)?);
                 }
                 ids::CODEC_ID => {
-                    track.codec_id = ebml::read_string(r, s).unwrap();
+                    track.codec_id = ebml::read_string(r, s)?;
                 }
                 ids::CODEC_NAME => {
-                    track.codec_name = Some(ebml::read_utf8(r, s).unwrap());
+                    track.codec_name = Some(ebml::read_utf8(r, s)?);
                 }
                 ids::VIDEO => {
                     track.settings = Settings::Video(Video::parse(r, s)?);
@@ -344,9 +337,7 @@ impl Track {
                 ids::AUDIO => {
                     track.settings = Settings::Audio(Audio::parse(r, s)?);
                 }
-                _ => {
-                    ebml::skip(r, s).unwrap();
-                }
+                _ => {ebml::skip(r, s)?;}
             }
 
             size -= len;
@@ -373,11 +364,11 @@ impl Attachment {
     }
 
     fn parse(r: &mut io::Read, mut size: u64) ->
-        Result<Vec<Attachment>,ReadMKVError> {
+        Result<Vec<Attachment>,MKVError> {
         let mut attachments = Vec::new();
 
         while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+            let (i, s, len) = ebml::read_element_id_size(r)?;
 
             if i == ids::ATTACHEDFILE {
                 attachments.push(Attachment::parse_entry(r, s)?);
@@ -393,29 +384,26 @@ impl Attachment {
     }
 
     fn parse_entry(r: &mut io::Read, mut size: u64) ->
-        Result<Attachment,ReadMKVError> {
+        Result<Attachment,MKVError> {
         let mut attachment = Attachment::new();
 
         while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+            let (i, s, len) = ebml::read_element_id_size(r)?;
 
             match i {
                 ids::FILEDESCRIPTION => {
-                    attachment.description =
-                        Some(ebml::read_utf8(r, s).unwrap());
+                    attachment.description = Some(ebml::read_utf8(r, s)?);
                 }
                 ids::FILENAME => {
-                    attachment.name = ebml::read_utf8(r, s).unwrap();
+                    attachment.name = ebml::read_utf8(r, s)?;
                 }
                 ids::FILEMIMETYPE => {
-                    attachment.mime_type = ebml::read_string(r, s).unwrap();
+                    attachment.mime_type = ebml::read_string(r, s)?;
                 }
                 ids::FILEDATA => {
-                    attachment.data = ebml::read_bin(r, s).unwrap();
+                    attachment.data = ebml::read_bin(r, s)?;
                 }
-                _ => {
-                    let _ = ebml::skip(r, s).unwrap();
-                }
+                _ => {ebml::skip(r, s)?;}
             }
 
             size -= len;
@@ -443,16 +431,16 @@ impl ChapterEdition {
     }
 
     fn parse(r: &mut io::Read, mut size: u64) ->
-        Result<Vec<ChapterEdition>,ReadMKVError> {
+        Result<Vec<ChapterEdition>,MKVError> {
         let mut chaptereditions = Vec::new();
 
         while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+            let (i, s, len) = ebml::read_element_id_size(r)?;
 
             if i == ids::EDITIONENTRY {
                 chaptereditions.push(ChapterEdition::parse_entry(r, s)?);
             } else {
-                ebml::skip(r, s).unwrap();
+                ebml::skip(r, s)?;
             }
 
             size -= s;
@@ -463,32 +451,27 @@ impl ChapterEdition {
     }
 
     fn parse_entry(r: &mut io::Read, mut size: u64) ->
-        Result<ChapterEdition,ReadMKVError> {
+        Result<ChapterEdition,MKVError> {
 
         let mut chapteredition = ChapterEdition::new();
 
         while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+            let (i, s, len) = ebml::read_element_id_size(r)?;
 
             match i {
                 ids::EDITIONFLAGHIDDEN => {
-                    chapteredition.hidden =
-                        ebml::read_uint(r, s).unwrap() != 0;
+                    chapteredition.hidden = ebml::read_uint(r, s)? != 0;
                 }
                 ids::EDITIONFLAGDEFAULT => {
-                    chapteredition.default =
-                        ebml::read_uint(r, s).unwrap() != 0;
+                    chapteredition.default = ebml::read_uint(r, s)? != 0;
                 }
                 ids::EDITIONFLAGORDERED => {
-                    chapteredition.ordered =
-                        ebml::read_uint(r, s).unwrap() != 0;
+                    chapteredition.ordered = ebml::read_uint(r, s)? != 0;
                 }
                 ids::CHAPTERATOM => {
                     chapteredition.chapters.push(Chapter::parse(r, s)?)
                 }
-                _ => {
-                    ebml::skip(r, s).unwrap();
-                }
+                _ => {ebml::skip(r, s)?;}
             }
 
             size -= s;
@@ -517,35 +500,33 @@ impl Chapter {
                 display: Vec::new()}
     }
 
-    fn parse(r: &mut io::Read, mut size: u64) -> Result<Chapter,ReadMKVError> {
+    fn parse(r: &mut io::Read, mut size: u64) -> Result<Chapter,MKVError> {
         let mut chapter = Chapter::new();
 
         while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+            let (i, s, len) = ebml::read_element_id_size(r)?;
 
             match i {
                 ids::CHAPTERTIMESTART => {
                     chapter.time_start =
                         Duration::nanoseconds(
-                            ebml::read_uint(r, s).unwrap() as i64);
+                            ebml::read_uint(r, s)? as i64);
                 }
                 ids::CHAPTERTIMEEND => {
                     chapter.time_end =
                         Some(Duration::nanoseconds(
-                            ebml::read_uint(r, s).unwrap() as i64));
+                            ebml::read_uint(r, s)? as i64));
                 }
                 ids::CHAPTERFLAGHIDDEN => {
-                    chapter.hidden = ebml::read_uint(r, s).unwrap() != 0;
+                    chapter.hidden = ebml::read_uint(r, s)? != 0;
                 }
                 ids::CHAPTERFLAGENABLED => {
-                    chapter.enabled = ebml::read_uint(r, s).unwrap() != 0;
+                    chapter.enabled = ebml::read_uint(r, s)? != 0;
                 }
                 ids::CHAPTERDISPLAY => {
                     chapter.display.push(ChapterDisplay::parse(r, s)?);
                 }
-                _ => {
-                    ebml::skip(r, s).unwrap();
-                }
+                _ => {ebml::skip(r, s)?;}
             }
 
             size -= s;
@@ -568,22 +549,20 @@ impl ChapterDisplay {
     }
 
     fn parse(r: &mut io::Read, mut size: u64) ->
-        Result<ChapterDisplay,ReadMKVError> {
+        Result<ChapterDisplay,MKVError> {
         let mut display = ChapterDisplay::new();
 
         while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r).unwrap();
+            let (i, s, len) = ebml::read_element_id_size(r)?;
 
             match i {
                 ids::CHAPSTRING => {
-                    display.string = ebml::read_utf8(r, s).unwrap();
+                    display.string = ebml::read_utf8(r, s)?;
                 }
                 ids::CHAPLANGUAGE => {
-                    display.language = ebml::read_string(r, s).unwrap();
+                    display.language = ebml::read_string(r, s)?;
                 }
-                _ => {
-                    ebml::skip(r, s).unwrap();
-                }
+                _ => {ebml::skip(r, s)?;}
             }
 
             size -= s;
