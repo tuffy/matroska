@@ -210,36 +210,42 @@ impl Info {
              writing_app: String::new()}
     }
 
-    fn parse(r: &mut io::Read, mut size: u64) -> Result<Info,MKVError> {
+    fn parse(r: &mut io::Read, size: u64) -> Result<Info,MKVError> {
         let mut info = Info::new();
         let mut timecode_scale = None;
         let mut duration = None;
 
-        while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r)?;
-            match i {
-                ids::TITLE => {
-                    info.title = Some(ebml::read_utf8(r, s)?);
+        if let ebml::ElementType::Master(elements) =
+            ebml::Element::parse_body(r, ids::INFO, size)? {
+            for e in elements {
+                match e {
+                    ebml::Element{id: ids::TITLE, size: _,
+                                  val: ebml::ElementType::UTF8(title)} => {
+                        info.title = Some(title);
+                    }
+                    ebml::Element{id: ids::TIMECODESCALE, size: _,
+                                  val: ebml::ElementType::UInt(scale)} => {
+                        timecode_scale = Some(scale);
+                    }
+                    ebml::Element{id: ids::DURATION, size: _,
+                                  val: ebml::ElementType::Float(d)} => {
+                        duration = Some(d)
+                    }
+                    ebml::Element{id: ids::DATEUTC, size: _,
+                                  val: ebml::ElementType::Date(date)} => {
+                        info.date_utc = Some(date)
+                    }
+                    ebml::Element{id: ids::MUXINGAPP, size: _,
+                                  val: ebml::ElementType::UTF8(app)} => {
+                        info.muxing_app = app;
+                    }
+                    ebml::Element{id: ids::WRITINGAPP, size: _,
+                                  val: ebml::ElementType::UTF8(app)} => {
+                        info.writing_app = app;
+                    }
+                    _ => {}
                 }
-                ids::TIMECODESCALE => {
-                    timecode_scale = Some(ebml::read_uint(r, s)?);
-                }
-                ids::DURATION => {
-                    duration = Some(ebml::read_float(r, s)?);
-                }
-                ids::DATEUTC => {
-                    info.date_utc = Some(ebml::read_date(r, s)?);
-                }
-                ids::MUXINGAPP => {
-                    info.muxing_app = ebml::read_utf8(r, s)?;
-                }
-                ids::WRITINGAPP => {
-                    info.writing_app = ebml::read_utf8(r, s)?;
-                }
-                _ => {ebml::skip(r, s)?;}
             }
-            size -= len;
-            size -= s;
         }
 
         if let Some(d) = duration {
