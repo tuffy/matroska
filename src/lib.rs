@@ -34,7 +34,6 @@ impl MKV {
 
         let mut mkv = MKV::new();
 
-        // look for first Segment in stream
         /*FIXME - clean this up*/
         let (mut id_0, mut size_0, _) = ebml::read_element_id_size(&mut file)?;
         while id_0 != ids::SEGMENT {
@@ -46,7 +45,6 @@ impl MKV {
             size_0 = size;
         }
 
-        // pull out useful pieces from Segment
         while size_0 > 0 {
             let (id_1, size_1, len) = ebml::read_element_id_size(&mut file)?;
             match id_1 {
@@ -73,6 +71,24 @@ impl MKV {
         }
 
         Ok(mkv)
+    }
+
+    pub fn video_tracks(&self) -> Vec<&Track> {
+        self.tracks.iter()
+                   .filter(|t| t.tracktype == Tracktype::Video)
+                   .collect()
+    }
+
+    pub fn audio_tracks(&self) -> Vec<&Track> {
+        self.tracks.iter()
+                   .filter(|t| t.tracktype == Tracktype::Audio)
+                   .collect()
+    }
+
+    pub fn subtitle_tracks(&self) -> Vec<&Track> {
+        self.tracks.iter()
+                   .filter(|t| t.tracktype == Tracktype::Subtitle)
+                   .collect()
     }
 }
 
@@ -224,6 +240,33 @@ impl Audio {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum Tracktype {
+    Video,
+    Audio,
+    Complex,
+    Logo,
+    Subtitle,
+    Buttons,
+    Control,
+    Unknown
+}
+
+impl Tracktype {
+    fn new(tracktype: u64) -> Tracktype {
+        match tracktype {
+            0x01 => {Tracktype::Video}
+            0x02 => {Tracktype::Audio}
+            0x03 => {Tracktype::Complex}
+            0x10 => {Tracktype::Logo}
+            0x11 => {Tracktype::Subtitle}
+            0x12 => {Tracktype::Buttons}
+            0x20 => {Tracktype::Control}
+            _    => {Tracktype::Unknown}
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Settings {
     None,
@@ -235,7 +278,7 @@ pub enum Settings {
 pub struct Track {
     pub number: u64,
     pub uid: u64,
-    pub tracktype: u64, /*FIXME - make enum?*/
+    pub tracktype: Tracktype,
     pub enabled: bool,
     pub default: bool,
     pub forced: bool,
@@ -253,7 +296,7 @@ impl Track {
     fn new() -> Track {
         Track{number: 0,
               uid: 0,
-              tracktype: 0,
+              tracktype: Tracktype::Unknown,
               enabled: true,
               default: true,
               forced: false,
@@ -297,7 +340,7 @@ impl Track {
                     track.uid = ebml::read_uint(r, s)?;
                 }
                 ids::TRACKTYPE => {
-                    track.tracktype = ebml::read_uint(r, s)?;
+                    track.tracktype = Tracktype::new(ebml::read_uint(r, s)?);
                 }
                 ids::FLAGENABLED => {
                     track.enabled = ebml::read_uint(r, s)? != 0;
