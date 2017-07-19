@@ -1,3 +1,22 @@
+//! A library for MKV file metadata parsing functionality
+//!
+//! Implemented as a set of nested structs with public values
+//! which one can use directly.
+//!
+//! ## Example
+//! ```
+//! use std::fs::File;
+//! use mkv::MKV;
+//! let f = File::open("filename.mkv").unwrap();
+//! let mkv = MKV::open(f).unwrap();
+//! println!("title : {:?}", mkv.info.title);
+//! ```
+//!
+//! For additional information about the MKV format, see the
+//! official [specification](https://matroska.org)
+
+#![warn(missing_docs)]
+
 use std::io;
 use std::fs::File;
 use std::collections::BTreeMap;
@@ -11,31 +30,36 @@ mod ids;
 use chrono::{DateTime, Duration};
 use chrono::offset::Utc;
 
-use ebml::MKVError;
+pub use ebml::MKVError;
 
+/// An MKV file
 #[derive(Debug)]
 pub struct MKV {
+    /// The file's Info segment
     pub info: Info,
+    /// The file's Tracks segment
     pub tracks: Vec<Track>,
+    /// The file's Attachments segment
     pub attachments: Vec<Attachment>,
+    /// The file's Chapters segment
     pub chapters: Vec<ChapterEdition>
 }
 
 impl MKV {
-    pub fn new() -> MKV {
+    fn new() -> MKV {
         MKV{info: Info::new(),
             tracks: Vec::new(),
             attachments: Vec::new(),
             chapters: Vec::new()}
     }
 
+    /// Parses contents of open MKV file
     pub fn open(mut file: File) -> Result<MKV,MKVError> {
         use std::io::Seek;
         use std::io::SeekFrom;
 
         let mut mkv = MKV::new();
 
-        /*FIXME - clean this up*/
         let (mut id_0, mut size_0, _) = ebml::read_element_id_size(&mut file)?;
         while id_0 != ids::SEGMENT {
             file.seek(SeekFrom::Current(size_0 as i64))
@@ -109,18 +133,21 @@ impl MKV {
         Ok(mkv)
     }
 
+    /// Returns all tracks with a type of "video"
     pub fn video_tracks(&self) -> Vec<&Track> {
         self.tracks.iter()
                    .filter(|t| t.tracktype == Tracktype::Video)
                    .collect()
     }
 
+    /// Returns all tracks with a type of "audio"
     pub fn audio_tracks(&self) -> Vec<&Track> {
         self.tracks.iter()
                    .filter(|t| t.tracktype == Tracktype::Audio)
                    .collect()
     }
 
+    /// Returns all tracks with a type of "subtitle"
     pub fn subtitle_tracks(&self) -> Vec<&Track> {
         self.tracks.iter()
                    .filter(|t| t.tracktype == Tracktype::Subtitle)
@@ -192,12 +219,18 @@ impl Seek {
     }
 }
 
+/// An Info segment with information pertaining to the entire file
 #[derive(Debug)]
 pub struct Info {
+    /// The file's title
     pub title: Option<String>,
+    /// The file's duration
     pub duration: Option<Duration>,
+    /// Production date
     pub date_utc: Option<DateTime<Utc>>,
+    /// The muxing application or library
     pub muxing_app: String,
+    /// The writing application
     pub writing_app: String
 }
 
@@ -253,142 +286,36 @@ impl Info {
     }
 }
 
-#[derive(Debug)]
-pub struct Video {
-    pub pixel_width: u64,
-    pub pixel_height: u64,
-    pub display_width: Option<u64>,
-    pub display_height: Option<u64>
-}
-
-impl Video {
-    fn new() -> Video {
-        Video{pixel_width: 0,
-              pixel_height: 0,
-              display_width: None,
-              display_height: None}
-    }
-
-    fn parse(r: &mut io::Read, mut size: u64) -> Result<Video,MKVError> {
-        let mut video = Video::new();
-
-        while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r)?;
-
-            match i {
-                ids::PIXELWIDTH => {
-                    video.pixel_width = ebml::read_uint(r, s)?;
-                }
-                ids::PIXELHEIGHT => {
-                    video.pixel_height = ebml::read_uint(r, s)?;
-                }
-                ids::DISPLAYWIDTH => {
-                    video.display_width = Some(ebml::read_uint(r, s)?);
-                }
-                ids::DISPLAYHEIGHT => {
-                    video.display_height = Some(ebml::read_uint(r, s)?);
-                }
-                _ => {ebml::skip(r, s)?;}
-            }
-
-            size -= len;
-            size -= s;
-        }
-
-        Ok(video)
-    }
-}
-
-#[derive(Debug)]
-pub struct Audio {
-    pub sample_rate: f64,
-    pub channels: u64,
-    pub bit_depth: Option<u64>
-}
-
-impl Audio {
-    fn new() -> Audio {
-        Audio{sample_rate: 0.0,
-              channels: 0,
-              bit_depth: None}
-    }
-
-    fn parse(r: &mut io::Read, mut size: u64) -> Result<Audio,MKVError> {
-        let mut audio = Audio::new();
-
-        while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r)?;
-
-            match i {
-                ids::SAMPLINGFREQUENCY => {
-                    audio.sample_rate = ebml::read_float(r, s)?;
-                }
-                ids::CHANNELS => {
-                    audio.channels = ebml::read_uint(r, s)?;
-                }
-                ids::BITDEPTH => {
-                    audio.bit_depth = Some(ebml::read_uint(r, s)?);
-                }
-                _ => {ebml::skip(r, s)?;}
-            }
-
-            size -= len;
-            size -= s;
-        }
-
-        Ok(audio)
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum Tracktype {
-    Video,
-    Audio,
-    Complex,
-    Logo,
-    Subtitle,
-    Buttons,
-    Control,
-    Unknown
-}
-
-impl Tracktype {
-    fn new(tracktype: u64) -> Tracktype {
-        match tracktype {
-            0x01 => {Tracktype::Video}
-            0x02 => {Tracktype::Audio}
-            0x03 => {Tracktype::Complex}
-            0x10 => {Tracktype::Logo}
-            0x11 => {Tracktype::Subtitle}
-            0x12 => {Tracktype::Buttons}
-            0x20 => {Tracktype::Control}
-            _    => {Tracktype::Unknown}
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum Settings {
-    None,
-    Video(Video),
-    Audio(Audio)
-}
-
+/// A TrackEntry segment in the Tracks segment container
 #[derive(Debug)]
 pub struct Track {
+    /// The track number, starting from 1
     pub number: u64,
+    /// The track's UID
     pub uid: u64,
+    /// The track's type
     pub tracktype: Tracktype,
+    /// If the track is usable
     pub enabled: bool,
+    /// If the track should be active if no other preferences found
     pub default: bool,
+    /// If the track *must* be active during playback
     pub forced: bool,
+    /// If the track contains blocks using lacing
     pub interlaced: bool,
+    /// Duration of each frame
     pub defaultduration: Option<Duration>,
+    /// Value to add to the block's timestamp
     pub offset: Option<i64>,
+    /// A human-readable track name
     pub name: Option<String>,
+    /// The track's language
     pub language: Option<String>,
+    /// The track's codec's ID
     pub codec_id: String,
+    /// The track's codec's human-readable name
     pub codec_name: Option<String>,
+    /// The track's audio or video settings
     pub settings: Settings
 }
 
@@ -490,11 +417,160 @@ impl Track {
     }
 }
 
+/// The type of a given track
+#[derive(Debug, PartialEq, Eq)]
+pub enum Tracktype {
+    /// A video track
+    Video,
+    /// An audio track
+    Audio,
+    /// A complex track
+    Complex,
+    /// A logo track
+    Logo,
+    /// A subtitle track
+    Subtitle,
+    /// A buttons track
+    Buttons,
+    /// A controls track
+    Control,
+    /// An unknown track type
+    Unknown
+}
+
+impl Tracktype {
+    fn new(tracktype: u64) -> Tracktype {
+        match tracktype {
+            0x01 => {Tracktype::Video}
+            0x02 => {Tracktype::Audio}
+            0x03 => {Tracktype::Complex}
+            0x10 => {Tracktype::Logo}
+            0x11 => {Tracktype::Subtitle}
+            0x12 => {Tracktype::Buttons}
+            0x20 => {Tracktype::Control}
+            _    => {Tracktype::Unknown}
+        }
+    }
+}
+
+/// The settings a track may have
+#[derive(Debug)]
+pub enum Settings {
+    /// No settings (for non audio/video tracks)
+    None,
+    /// Video settings
+    Video(Video),
+    /// Audio settings
+    Audio(Audio)
+}
+
+
+/// A video track's specifications
+#[derive(Debug)]
+pub struct Video {
+    /// Width of encoded video frames in pixels
+    pub pixel_width: u64,
+    /// Height of encoded video frames in pixels
+    pub pixel_height: u64,
+    /// Width of video frames to display
+    pub display_width: Option<u64>,
+    /// Height of video frames to display
+    pub display_height: Option<u64>
+}
+
+impl Video {
+    fn new() -> Video {
+        Video{pixel_width: 0,
+              pixel_height: 0,
+              display_width: None,
+              display_height: None}
+    }
+
+    fn parse(r: &mut io::Read, mut size: u64) -> Result<Video,MKVError> {
+        let mut video = Video::new();
+
+        while size > 0 {
+            let (i, s, len) = ebml::read_element_id_size(r)?;
+
+            match i {
+                ids::PIXELWIDTH => {
+                    video.pixel_width = ebml::read_uint(r, s)?;
+                }
+                ids::PIXELHEIGHT => {
+                    video.pixel_height = ebml::read_uint(r, s)?;
+                }
+                ids::DISPLAYWIDTH => {
+                    video.display_width = Some(ebml::read_uint(r, s)?);
+                }
+                ids::DISPLAYHEIGHT => {
+                    video.display_height = Some(ebml::read_uint(r, s)?);
+                }
+                _ => {ebml::skip(r, s)?;}
+            }
+
+            size -= len;
+            size -= s;
+        }
+
+        Ok(video)
+    }
+}
+
+/// An audio track's specifications
+#[derive(Debug)]
+pub struct Audio {
+    /// The sample rate in Hz
+    pub sample_rate: f64,
+    /// The number of audio channels
+    pub channels: u64,
+    /// The bit depth of each sample
+    pub bit_depth: Option<u64>
+}
+
+impl Audio {
+    fn new() -> Audio {
+        Audio{sample_rate: 0.0,
+              channels: 0,
+              bit_depth: None}
+    }
+
+    fn parse(r: &mut io::Read, mut size: u64) -> Result<Audio,MKVError> {
+        let mut audio = Audio::new();
+
+        while size > 0 {
+            let (i, s, len) = ebml::read_element_id_size(r)?;
+
+            match i {
+                ids::SAMPLINGFREQUENCY => {
+                    audio.sample_rate = ebml::read_float(r, s)?;
+                }
+                ids::CHANNELS => {
+                    audio.channels = ebml::read_uint(r, s)?;
+                }
+                ids::BITDEPTH => {
+                    audio.bit_depth = Some(ebml::read_uint(r, s)?);
+                }
+                _ => {ebml::skip(r, s)?;}
+            }
+
+            size -= len;
+            size -= s;
+        }
+
+        Ok(audio)
+    }
+}
+
+/// An attached file (often used for cover art)
 #[derive(Debug)]
 pub struct Attachment {
+    /// A human-friendly name for the file
     pub description: Option<String>,
+    /// The file's name
     pub name: String,
+    /// The file's MIME type
     pub mime_type: String,
+    /// The file's raw data
     pub data: Vec<u8>
 }
 
@@ -557,11 +633,16 @@ impl Attachment {
     }
 }
 
+/// A complete set of chapters
 #[derive(Debug)]
 pub struct ChapterEdition {
+    /// Whether the chapters should be hidden in the user interface
     pub hidden: bool,
+    /// Whether the chapters should be the default
     pub default: bool,
+    /// Whether the order to play chapters is enforced
     pub ordered: bool,
+    /// The individual chapter entries
     pub chapters: Vec<Chapter>
 }
 
@@ -625,12 +706,18 @@ impl ChapterEdition {
     }
 }
 
+/// An individual chapter point
 #[derive(Debug)]
 pub struct Chapter {
+    /// Timestamp of the start of the chapter
     pub time_start: Duration,
+    /// Timestamp of the end of the chapter
     pub time_end: Option<Duration>,
+    /// Whether the chapter point should be hidden in the user interface
     pub hidden: bool,
+    /// Whether the chapter point should be enabled in the user interface
     pub enabled: bool,
+    /// Contains all strings to use for displaying chapter
     pub display: Vec<ChapterDisplay>
 }
 
@@ -680,9 +767,12 @@ impl Chapter {
     }
 }
 
+/// The display string for a chapter point entry
 #[derive(Debug)]
 pub struct ChapterDisplay {
+    /// The user interface string
     pub string: String,
+    /// The string's language
     pub language: String
 }
 
