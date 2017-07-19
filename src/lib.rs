@@ -1,5 +1,6 @@
 use std::io;
 use std::fs::File;
+use std::collections::BTreeMap;
 
 extern crate bitstream_io;
 extern crate chrono;
@@ -45,9 +46,44 @@ impl MKV {
             size_0 = size;
         }
 
+        let segment_start = file.seek(SeekFrom::Current(0))
+                                .map_err(MKVError::Io)?;
+
         while size_0 > 0 {
             let (id_1, size_1, len) = ebml::read_element_id_size(&mut file)?;
             match id_1 {
+                ids::SEEKHEAD => {
+                    let seektable = Seektable::parse(&mut file, size_1)?;
+                    if let Some(pos) = seektable.get(ids::INFO) {
+                        file.seek(SeekFrom::Start(pos + segment_start))
+                            .map_err(MKVError::Io)?;
+                        let (i, s, _) = ebml::read_element_id_size(&mut file)?;
+                        assert_eq!(i, ids::INFO);
+                        mkv.info = Info::parse(&mut file, s)?;
+                    }
+                    if let Some(pos) = seektable.get(ids::TRACKS) {
+                        file.seek(SeekFrom::Start(pos + segment_start))
+                            .map_err(MKVError::Io)?;
+                        let (i, s, _) = ebml::read_element_id_size(&mut file)?;
+                        assert_eq!(i, ids::TRACKS);
+                        mkv.tracks = Track::parse(&mut file, s)?;
+                    }
+                    if let Some(pos) = seektable.get(ids::ATTACHMENTS) {
+                        file.seek(SeekFrom::Start(pos + segment_start))
+                            .map_err(MKVError::Io)?;
+                        let (i, s, _) = ebml::read_element_id_size(&mut file)?;
+                        assert_eq!(i, ids::ATTACHMENTS);
+                        mkv.attachments = Attachment::parse(&mut file, s)?;
+                    }
+                    if let Some(pos) = seektable.get(ids::CHAPTERS) {
+                        file.seek(SeekFrom::Start(pos + segment_start))
+                            .map_err(MKVError::Io)?;
+                        let (i, s, _) = ebml::read_element_id_size(&mut file)?;
+                        assert_eq!(i, ids::CHAPTERS);
+                        mkv.chapters = ChapterEdition::parse(&mut file, s)?;
+                    }
+                    return Ok(mkv)
+                }
                 ids::INFO => {
                     mkv.info = Info::parse(&mut file, size_1)?;
                 }
@@ -89,6 +125,70 @@ impl MKV {
         self.tracks.iter()
                    .filter(|t| t.tracktype == Tracktype::Subtitle)
                    .collect()
+    }
+}
+
+#[derive(Debug)]
+struct Seektable {
+    seek: BTreeMap<u32,u64>
+}
+
+impl Seektable {
+    fn new() -> Seektable {
+        Seektable{seek: BTreeMap::new()}
+    }
+
+    #[inline]
+    fn get(&self, id: u32) -> Option<u64> {
+        self.seek.get(&id).map(|&i| i)
+    }
+
+    fn parse(r: &mut io::Read, mut size: u64) -> Result<Seektable,MKVError> {
+        let mut seektable = Seektable::new();
+        while size > 0 {
+            let (i, s, len) = ebml::read_element_id_size(r)?;
+            match i {
+                ids::SEEK => {
+                    let seek = Seek::parse(r, s)?;
+                    seektable.seek.insert(seek.id(), seek.position);
+                }
+                _ => {ebml::skip(r, s)?;}
+            }
+            size -= s;
+            size -= len;
+        }
+        Ok(seektable)
+    }
+}
+
+#[derive(Debug)]
+struct Seek {
+    id: Vec<u8>,
+    position: u64
+}
+
+impl Seek {
+    fn new() -> Seek {
+        Seek{id: Vec::new(), position: 0}
+    }
+
+    fn id(&self) -> u32 {
+        self.id.iter().fold(0, |acc, i| (acc << 8) | *i as u32)
+    }
+
+    fn parse(r: &mut io::Read, mut size: u64) -> Result<Seek,MKVError> {
+        let mut seek = Seek::new();
+        while size > 0 {
+            let (i, s, len) = ebml::read_element_id_size(r)?;
+            match i {
+                ids::SEEKID => {seek.id = ebml::read_bin(r, s)?;}
+                ids::SEEKPOSITION => {seek.position = ebml::read_uint(r, s)?;}
+                _ => {ebml::skip(r, s)?;}
+            }
+            size -= s;
+            size -= len;
+        }
+        Ok(seek)
     }
 }
 

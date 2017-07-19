@@ -1,4 +1,8 @@
 pub const SEGMENT: u32 = 0x18538067;
+pub const SEEKHEAD: u32 = 0x114D9B74;
+pub const SEEK: u32 = 0x4DBB;
+pub const SEEKID: u32 = 0x53AB;
+pub const SEEKPOSITION: u32 = 0x53AC;
 pub const INFO: u32 = 0x1549A966;
 pub const TITLE: u32 = 0x7BA9;
 pub const MUXINGAPP: u32 = 0x4D80;
