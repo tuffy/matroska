@@ -1,3 +1,11 @@
+// Copyright 2017 Brian Langenberger
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
 pub const SEGMENT: u32 = 0x18538067;
 pub const SEEKHEAD: u32 = 0x114D9B74;
 pub const SEEK: u32 = 0x4DBB;

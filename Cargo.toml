@@ -1,8 +1,11 @@
 [package]
 name = "matroska"
+description = "Library for parsing Matroska (MKV) file metadata."
+keywords = ["matroska", "mkv"]
 version = "0.3.0"
 authors = ["Brian Langenberger <bjl@usa.net>"]
+license = "MIT/Apache-2.0"
 
 [dependencies]
-bitstream-io = {path="../bitstream-io"}
+bitstream-io = "0.6"
 chrono = "0.4"
