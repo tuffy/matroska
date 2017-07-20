@@ -17,7 +17,7 @@
 //! use matroska::Matroska;
 //! let f = File::open("filename.mkv").unwrap();
 //! let matroska = Matroska::open(f).unwrap();
-//! println!("title : {:?}", mkv.info.title);
+//! println!("title : {:?}", matroska.info.title);
 //! ```
 //!
 //! For additional information about the Matroska format, see the
