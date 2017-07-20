@@ -5,6 +5,7 @@ use bitstream_io::{BitReader, BE};
 use chrono::DateTime;
 use chrono::offset::Utc;
 
+/// Some form of error when parsing MKV file
 #[derive(Debug)]
 pub struct Element {
     pub id: u32,
@@ -107,12 +108,19 @@ pub enum ElementType {
 
 #[derive(Debug)]
 pub enum MKVError {
+    /// An I/O error
     Io(io::Error),
+    /// An error decoding a UTF-8 string
     UTF8(FromUtf8Error),
+    /// An invalid element ID
     InvalidID,
+    /// An invalid element size
     InvalidSize,
+    /// An invalid unsigned integer
     InvalidUint,
+    /// An invalid floating point value
     InvalidFloat,
+    /// An invalid date value
     InvalidDate
 }
 
