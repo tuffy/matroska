@@ -20,7 +20,18 @@ impl Element {
         Ok(Element{id: id, size: header_len + size, val: data})
     }
 
-    pub fn parse_body(r: &mut io::Read, id: u32, mut size: u64) ->
+    pub fn parse_master(r: &mut io::Read, mut size: u64) ->
+        Result<Vec<Element>,MKVError> {
+        let mut elements = Vec::new();
+        while size > 0 {
+            let e = Element::parse(r)?;
+            size -= e.size;
+            elements.push(e);
+        }
+        Ok(elements)
+    }
+
+    pub fn parse_body(r: &mut io::Read, id: u32, size: u64) ->
         Result<ElementType,MKVError> {
         match id {
             0x80 | 0x8E | 0x8F | 0xA0 | 0xA6 | 0xAE | 0xB6 | 0xB7 | 0xBB |
@@ -31,13 +42,7 @@ impl Element {
             0x1043A770 | 0x114D9B74 | 0x1254C367 | 0x1549A966 | 0x1654AE6B |
             0x18538067 | 0x1941A469 | 0x1A45DFA3 | 0x1B538667 | 0x1C53BB6B |
             0x1F43B675 => {
-                let mut elements = Vec::new();
-                while size > 0 {
-                    let e = Element::parse(r)?;
-                    size -= e.size;
-                    elements.push(e);
-                }
-                Ok(ElementType::Master(elements))
+                Element::parse_master(r, size).map(|e| ElementType::Master(e))
             }
             0xFB | 0xFD | 0x537F | 0x75A2 => {
                 read_int(r, size).map(|i| ElementType::Int(i))
@@ -106,6 +111,7 @@ pub enum ElementType {
     Date(DateTime<Utc>)
 }
 
+/// A possible error when parsing MKV file
 #[derive(Debug)]
 pub enum MKVError {
     /// An I/O error
@@ -241,8 +247,4 @@ pub fn read_bin(r: &mut io::Read, size: u64) -> Result<Vec<u8>,MKVError> {
     let mut buf = Vec::with_capacity(size as usize);
     buf.resize(size as usize, 0);
     r.read_exact(&mut buf).map(|()| buf).map_err(MKVError::Io)
-}
-
-pub fn skip(r: &mut io::Read, size: u64) -> Result<(),MKVError> {
-    read_bin(r, size).map(|_| ())
 }

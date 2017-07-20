@@ -20,7 +20,6 @@ pub const FLAGDEFAULT: u32 = 0x88;
 pub const FLAGFORCED: u32 = 0x55AA;
 pub const FLAGLACING: u32 = 0x9C;
 pub const DEFAULTDURATION: u32 = 0x23E383;
-pub const TRACKOFFSET: u32 = 0x537F;
 pub const NAME: u32 = 0x536E;
 pub const LANGUAGE: u32 = 0x22B59C;
 pub const CODEC_ID: u32 = 0x86;

@@ -31,6 +31,7 @@ use chrono::{DateTime, Duration};
 use chrono::offset::Utc;
 
 pub use ebml::MKVError;
+use ebml::{Element, ElementType};
 
 /// An MKV file
 #[derive(Debug)]
@@ -170,19 +171,17 @@ impl Seektable {
         self.seek.get(&id).map(|&i| i)
     }
 
-    fn parse(r: &mut io::Read, mut size: u64) -> Result<Seektable,MKVError> {
+    fn parse(r: &mut io::Read, size: u64) -> Result<Seektable,MKVError> {
         let mut seektable = Seektable::new();
-        while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r)?;
-            match i {
-                ids::SEEK => {
-                    let seek = Seek::parse(r, s)?;
+        for e in Element::parse_master(r, size)? {
+            match e {
+                Element{id: ids::SEEK, size: _,
+                        val: ElementType::Master(sub_elements)} => {
+                    let seek = Seek::build(sub_elements);
                     seektable.seek.insert(seek.id(), seek.position);
                 }
-                _ => {ebml::skip(r, s)?;}
+                _ => {}
             }
-            size -= s;
-            size -= len;
         }
         Ok(seektable)
     }
@@ -203,19 +202,22 @@ impl Seek {
         self.id.iter().fold(0, |acc, i| (acc << 8) | *i as u32)
     }
 
-    fn parse(r: &mut io::Read, mut size: u64) -> Result<Seek,MKVError> {
+    fn build(elements: Vec<Element>) -> Seek {
         let mut seek = Seek::new();
-        while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r)?;
-            match i {
-                ids::SEEKID => {seek.id = ebml::read_bin(r, s)?;}
-                ids::SEEKPOSITION => {seek.position = ebml::read_uint(r, s)?;}
-                _ => {ebml::skip(r, s)?;}
+        for e in elements {
+            match e {
+                Element{id: ids::SEEKID, size: _,
+                        val: ElementType::Binary(id)} => {
+                    seek.id = id;
+                }
+                Element{id: ids::SEEKPOSITION, size: _,
+                        val: ElementType::UInt(position)} => {
+                    seek.position = position;
+                }
+                _ => {}
             }
-            size -= s;
-            size -= len;
         }
-        Ok(seek)
+        seek
     }
 }
 
@@ -248,36 +250,33 @@ impl Info {
         let mut timecode_scale = None;
         let mut duration = None;
 
-        if let ebml::ElementType::Master(elements) =
-            ebml::Element::parse_body(r, ids::INFO, size)? {
-            for e in elements {
-                match e {
-                    ebml::Element{id: ids::TITLE, size: _,
-                                  val: ebml::ElementType::UTF8(title)} => {
-                        info.title = Some(title);
-                    }
-                    ebml::Element{id: ids::TIMECODESCALE, size: _,
-                                  val: ebml::ElementType::UInt(scale)} => {
-                        timecode_scale = Some(scale);
-                    }
-                    ebml::Element{id: ids::DURATION, size: _,
-                                  val: ebml::ElementType::Float(d)} => {
-                        duration = Some(d)
-                    }
-                    ebml::Element{id: ids::DATEUTC, size: _,
-                                  val: ebml::ElementType::Date(date)} => {
-                        info.date_utc = Some(date)
-                    }
-                    ebml::Element{id: ids::MUXINGAPP, size: _,
-                                  val: ebml::ElementType::UTF8(app)} => {
-                        info.muxing_app = app;
-                    }
-                    ebml::Element{id: ids::WRITINGAPP, size: _,
-                                  val: ebml::ElementType::UTF8(app)} => {
-                        info.writing_app = app;
-                    }
-                    _ => {}
+        for e in Element::parse_master(r, size)? {
+            match e {
+                Element{id: ids::TITLE, size: _,
+                        val: ElementType::UTF8(title)} => {
+                    info.title = Some(title);
                 }
+                Element{id: ids::TIMECODESCALE, size: _,
+                        val: ElementType::UInt(scale)} => {
+                    timecode_scale = Some(scale);
+                }
+                Element{id: ids::DURATION, size: _,
+                        val: ElementType::Float(d)} => {
+                    duration = Some(d)
+                }
+                Element{id: ids::DATEUTC, size: _,
+                        val: ElementType::Date(date)} => {
+                    info.date_utc = Some(date)
+                }
+                Element{id: ids::MUXINGAPP, size: _,
+                        val: ElementType::UTF8(app)} => {
+                    info.muxing_app = app;
+                }
+                Element{id: ids::WRITINGAPP, size: _,
+                        val: ElementType::UTF8(app)} => {
+                    info.writing_app = app;
+                }
+                _ => {}
             }
         }
 
@@ -311,8 +310,6 @@ pub struct Track {
     pub interlaced: bool,
     /// Duration of each frame
     pub defaultduration: Option<Duration>,
-    /// Value to add to the block's timestamp
-    pub offset: Option<i64>,
     /// A human-readable track name
     pub name: Option<String>,
     /// The track's language
@@ -335,7 +332,6 @@ impl Track {
               forced: false,
               interlaced: true,
               defaultduration: None,
-              offset: None,
               name: None,
               language: None,
               codec_id: String::new(),
@@ -343,83 +339,84 @@ impl Track {
               settings: Settings::None}
     }
 
-    fn parse(r: &mut io::Read, mut size: u64) -> Result<Vec<Track>,MKVError> {
-        let mut tracks = Vec::new();
-
-        while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r)?;
-            if i == ids::TRACKENTRY {
-                tracks.push(Track::parse_entry(r, s)?);
-            } else {
-                ebml::skip(r, s)?;
-            }
-
-            size -= len;
-            size -= s;
-        }
-        Ok(tracks)
+    fn parse(r: &mut io::Read, size: u64) -> Result<Vec<Track>,MKVError> {
+        Element::parse_master(r, size).map(
+            |elements| elements.into_iter().filter_map(|e| match e {
+                Element{id: ids::TRACKENTRY, size: _,
+                        val: ElementType::Master(sub_elements)} => {
+                    Some(Track::build_entry(sub_elements))
+                }
+                _ => {None}
+            }).collect())
     }
 
-    fn parse_entry(r: &mut io::Read, mut size: u64) -> Result<Track,MKVError> {
+    fn build_entry(elements: Vec<Element>) -> Track {
         let mut track = Track::new();
-        while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r)?;
-
-            match i {
-                ids::TRACKNUMBER => {
-                    track.number = ebml::read_uint(r, s)?;
+        for e in elements {
+            match e {
+                Element{id: ids::TRACKNUMBER, size: _,
+                        val: ElementType::UInt(number)} => {
+                    track.number = number;
                 }
-                ids::TRACKUID => {
-                    track.uid = ebml::read_uint(r, s)?;
+                Element{id: ids::TRACKUID, size: _,
+                        val: ElementType::UInt(uid)} => {
+                    track.uid = uid;
                 }
-                ids::TRACKTYPE => {
-                    track.tracktype = Tracktype::new(ebml::read_uint(r, s)?);
+                Element{id: ids::TRACKTYPE, size: _,
+                        val: ElementType::UInt(tracktype)} => {
+                    track.tracktype = Tracktype::new(tracktype);
                 }
-                ids::FLAGENABLED => {
-                    track.enabled = ebml::read_uint(r, s)? != 0;
+                Element{id: ids::FLAGENABLED, size: _,
+                        val: ElementType::UInt(enabled)} => {
+                    track.enabled = enabled != 0;
                 }
-                ids::FLAGDEFAULT => {
-                    track.default = ebml::read_uint(r, s)? != 0;
+                Element{id: ids::FLAGDEFAULT, size: _,
+                        val: ElementType::UInt(default)} => {
+                    track.default = default != 0;
                 }
-                ids::FLAGFORCED => {
-                    track.forced = ebml::read_uint(r, s)? != 0;
+                Element{id: ids::FLAGFORCED, size: _,
+                        val: ElementType::UInt(forced)} => {
+                    track.forced = forced != 0;
                 }
-                ids::FLAGLACING => {
-                    track.interlaced = ebml::read_uint(r, s)? != 0;
+                Element{id: ids::FLAGLACING, size: _,
+                        val: ElementType::UInt(lacing)} => {
+                    track.interlaced = lacing != 0;
                 }
-                ids::DEFAULTDURATION => {
+                Element{id: ids::DEFAULTDURATION, size: _,
+                        val: ElementType::UInt(duration)} => {
                     track.defaultduration =
-                        Some(Duration::nanoseconds(
-                            ebml::read_uint(r, s)? as i64));
+                        Some(Duration::nanoseconds(duration as i64));
                 }
-                ids::TRACKOFFSET => {
-                    track.offset = Some(ebml::read_int(r, s)?);
+                Element{id: ids::NAME, size: _,
+                        val: ElementType::UTF8(name)} => {
+                    track.name = Some(name);
                 }
-                ids::NAME => {
-                    track.name = Some(ebml::read_utf8(r, s)?);
+                Element{id: ids::LANGUAGE, size: _,
+                        val: ElementType::String(language)} => {
+                    track.language = Some(language);
                 }
-                ids::LANGUAGE => {
-                    track.language = Some(ebml::read_string(r, s)?);
+                Element{id: ids::CODEC_ID, size: _,
+                        val: ElementType::String(codec_id)} => {
+                    track.codec_id = codec_id;
                 }
-                ids::CODEC_ID => {
-                    track.codec_id = ebml::read_string(r, s)?;
+                Element{id: ids::CODEC_NAME, size: _,
+                        val: ElementType::UTF8(codec_name)} => {
+                    track.codec_name = Some(codec_name);
                 }
-                ids::CODEC_NAME => {
-                    track.codec_name = Some(ebml::read_utf8(r, s)?);
+                Element{id: ids::VIDEO, size: _,
+                        val: ElementType::Master(sub_elements)} => {
+                    track.settings =
+                        Settings::Video(Video::build(sub_elements));
                 }
-                ids::VIDEO => {
-                    track.settings = Settings::Video(Video::parse(r, s)?);
+                Element{id: ids::AUDIO, size: _,
+                        val: ElementType::Master(sub_elements)} => {
+                    track.settings =
+                        Settings::Audio(Audio::build(sub_elements));
                 }
-                ids::AUDIO => {
-                    track.settings = Settings::Audio(Audio::parse(r, s)?);
-                }
-                _ => {ebml::skip(r, s)?;}
+                _ => {}
             }
-
-            size -= len;
-            size -= s;
         }
-        Ok(track)
+        track
     }
 }
 
@@ -492,33 +489,30 @@ impl Video {
               display_height: None}
     }
 
-    fn parse(r: &mut io::Read, mut size: u64) -> Result<Video,MKVError> {
+    fn build(elements: Vec<Element>) -> Video {
         let mut video = Video::new();
-
-        while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r)?;
-
-            match i {
-                ids::PIXELWIDTH => {
-                    video.pixel_width = ebml::read_uint(r, s)?;
+        for e in elements {
+            match e {
+                Element{id: ids::PIXELWIDTH, size: _,
+                        val: ElementType::UInt(width)} => {
+                    video.pixel_width = width;
                 }
-                ids::PIXELHEIGHT => {
-                    video.pixel_height = ebml::read_uint(r, s)?;
+                Element{id: ids::PIXELHEIGHT, size: _,
+                        val: ElementType::UInt(height)} => {
+                    video.pixel_height = height;
                 }
-                ids::DISPLAYWIDTH => {
-                    video.display_width = Some(ebml::read_uint(r, s)?);
+                Element{id: ids::DISPLAYWIDTH, size: _,
+                        val: ElementType::UInt(width)} => {
+                    video.display_width = Some(width);
                 }
-                ids::DISPLAYHEIGHT => {
-                    video.display_height = Some(ebml::read_uint(r, s)?);
+                Element{id: ids::DISPLAYHEIGHT, size: _,
+                        val: ElementType::UInt(height)} => {
+                    video.display_height = Some(height)
                 }
-                _ => {ebml::skip(r, s)?;}
+                _ => {}
             }
-
-            size -= len;
-            size -= s;
         }
-
-        Ok(video)
+        video
     }
 }
 
@@ -540,30 +534,26 @@ impl Audio {
               bit_depth: None}
     }
 
-    fn parse(r: &mut io::Read, mut size: u64) -> Result<Audio,MKVError> {
+    fn build(elements: Vec<Element>) -> Audio {
         let mut audio = Audio::new();
-
-        while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r)?;
-
-            match i {
-                ids::SAMPLINGFREQUENCY => {
-                    audio.sample_rate = ebml::read_float(r, s)?;
+        for e in elements {
+            match e {
+                Element{id: ids::SAMPLINGFREQUENCY, size: _,
+                        val: ElementType::Float(frequency)} => {
+                    audio.sample_rate = frequency;
                 }
-                ids::CHANNELS => {
-                    audio.channels = ebml::read_uint(r, s)?;
+                Element{id: ids::CHANNELS, size: _,
+                        val: ElementType::UInt(channels)} => {
+                    audio.channels = channels;
                 }
-                ids::BITDEPTH => {
-                    audio.bit_depth = Some(ebml::read_uint(r, s)?);
+                Element{id: ids::BITDEPTH, size: _,
+                        val: ElementType::UInt(bit_depth)} => {
+                    audio.bit_depth = Some(bit_depth);
                 }
-                _ => {ebml::skip(r, s)?;}
+                _ => {}
             }
-
-            size -= len;
-            size -= s;
         }
-
-        Ok(audio)
+        audio
     }
 }
 
@@ -588,54 +578,42 @@ impl Attachment {
                    data: Vec::new()}
     }
 
-    fn parse(r: &mut io::Read, mut size: u64) ->
+    fn parse(r: &mut io::Read, size: u64) ->
         Result<Vec<Attachment>,MKVError> {
-        let mut attachments = Vec::new();
-
-        while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r)?;
-
-            if i == ids::ATTACHEDFILE {
-                attachments.push(Attachment::parse_entry(r, s)?);
-            } else {
-                let _ = ebml::skip(r, s);
-            }
-
-            size -= len;
-            size -= s;
-        }
-
-        Ok(attachments)
+        Element::parse_master(r, size).map(
+            |elements| elements.into_iter().filter_map(|e| match e {
+                Element{id: ids::ATTACHEDFILE, size: _,
+                        val: ElementType::Master(sub_elements)} => {
+                    Some(Attachment::build_entry(sub_elements))
+                }
+                _ => {None}
+            }).collect())
     }
 
-    fn parse_entry(r: &mut io::Read, mut size: u64) ->
-        Result<Attachment,MKVError> {
+    fn build_entry(elements: Vec<Element>) -> Attachment {
         let mut attachment = Attachment::new();
-
-        while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r)?;
-
-            match i {
-                ids::FILEDESCRIPTION => {
-                    attachment.description = Some(ebml::read_utf8(r, s)?);
+        for e in elements {
+            match e {
+                Element{id: ids::FILEDESCRIPTION, size: _,
+                        val: ElementType::UTF8(description)} => {
+                    attachment.description = Some(description);
                 }
-                ids::FILENAME => {
-                    attachment.name = ebml::read_utf8(r, s)?;
+                Element{id: ids::FILENAME, size: _,
+                        val: ElementType::UTF8(filename)} => {
+                    attachment.name = filename;
                 }
-                ids::FILEMIMETYPE => {
-                    attachment.mime_type = ebml::read_string(r, s)?;
+                Element{id: ids::FILEMIMETYPE, size: _,
+                        val: ElementType::String(mime_type)} => {
+                    attachment.mime_type = mime_type;
                 }
-                ids::FILEDATA => {
-                    attachment.data = ebml::read_bin(r, s)?;
+                Element{id: ids::FILEDATA, size: _,
+                        val: ElementType::Binary(data)} => {
+                    attachment.data = data;
                 }
-                _ => {ebml::skip(r, s)?;}
+                _ => {}
             }
-
-            size -= len;
-            size -= s;
         }
-
-        Ok(attachment)
+        attachment
     }
 }
 
@@ -660,55 +638,42 @@ impl ChapterEdition {
                        chapters: Vec::new()}
     }
 
-    fn parse(r: &mut io::Read, mut size: u64) ->
+    fn parse(r: &mut io::Read, size: u64) ->
         Result<Vec<ChapterEdition>,MKVError> {
-        let mut chaptereditions = Vec::new();
-
-        while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r)?;
-
-            if i == ids::EDITIONENTRY {
-                chaptereditions.push(ChapterEdition::parse_entry(r, s)?);
-            } else {
-                ebml::skip(r, s)?;
-            }
-
-            size -= s;
-            size -= len;
-        }
-
-        Ok(chaptereditions)
+        Element::parse_master(r, size).map(
+            |elements| elements.into_iter().filter_map(|e| match e {
+                Element{id: ids::EDITIONENTRY, size: _,
+                        val: ElementType::Master(sub_elements)} => {
+                    Some(ChapterEdition::build_entry(sub_elements))
+                }
+                _ => {None}
+            }).collect())
     }
 
-    fn parse_entry(r: &mut io::Read, mut size: u64) ->
-        Result<ChapterEdition,MKVError> {
-
+    fn build_entry(elements: Vec<Element>) -> ChapterEdition {
         let mut chapteredition = ChapterEdition::new();
-
-        while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r)?;
-
-            match i {
-                ids::EDITIONFLAGHIDDEN => {
-                    chapteredition.hidden = ebml::read_uint(r, s)? != 0;
+        for e in elements {
+            match e {
+                Element{id: ids::EDITIONFLAGHIDDEN, size: _,
+                        val: ElementType::UInt(hidden)} => {
+                    chapteredition.hidden = hidden != 0;
                 }
-                ids::EDITIONFLAGDEFAULT => {
-                    chapteredition.default = ebml::read_uint(r, s)? != 0;
+                Element{id: ids::EDITIONFLAGDEFAULT, size: _,
+                        val: ElementType::UInt(default)} => {
+                    chapteredition.default = default != 0;
                 }
-                ids::EDITIONFLAGORDERED => {
-                    chapteredition.ordered = ebml::read_uint(r, s)? != 0;
+                Element{id: ids::EDITIONFLAGORDERED, size: _,
+                        val: ElementType::UInt(ordered)} => {
+                    chapteredition.ordered = ordered != 0;
                 }
-                ids::CHAPTERATOM => {
-                    chapteredition.chapters.push(Chapter::parse(r, s)?)
+                Element{id: ids::CHAPTERATOM, size: _,
+                        val: ElementType::Master(sub_elements)} => {
+                    chapteredition.chapters.push(Chapter::build(sub_elements));
                 }
-                _ => {ebml::skip(r, s)?;}
+                _ => {}
             }
-
-            size -= s;
-            size -= len;
         }
-
-        Ok(chapteredition)
+        chapteredition
     }
 }
 
@@ -736,40 +701,34 @@ impl Chapter {
                 display: Vec::new()}
     }
 
-    fn parse(r: &mut io::Read, mut size: u64) -> Result<Chapter,MKVError> {
+    fn build(elements: Vec<Element>) -> Chapter {
         let mut chapter = Chapter::new();
-
-        while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r)?;
-
-            match i {
-                ids::CHAPTERTIMESTART => {
-                    chapter.time_start =
-                        Duration::nanoseconds(
-                            ebml::read_uint(r, s)? as i64);
+        for e in elements {
+            match e {
+                Element{id: ids::CHAPTERTIMESTART, size: _,
+                        val: ElementType::UInt(start)} => {
+                    chapter.time_start = Duration::nanoseconds(start as i64);
                 }
-                ids::CHAPTERTIMEEND => {
-                    chapter.time_end =
-                        Some(Duration::nanoseconds(
-                            ebml::read_uint(r, s)? as i64));
+                Element{id: ids::CHAPTERTIMEEND, size: _,
+                        val: ElementType::UInt(end)} => {
+                    chapter.time_end = Some(Duration::nanoseconds(end as i64));
                 }
-                ids::CHAPTERFLAGHIDDEN => {
-                    chapter.hidden = ebml::read_uint(r, s)? != 0;
+                Element{id: ids::CHAPTERFLAGHIDDEN, size: _,
+                        val: ElementType::UInt(hidden)} => {
+                    chapter.hidden = hidden != 0;
                 }
-                ids::CHAPTERFLAGENABLED => {
-                    chapter.enabled = ebml::read_uint(r, s)? != 0;
+                Element{id: ids::CHAPTERFLAGENABLED, size: _,
+                        val: ElementType::UInt(enabled)} => {
+                    chapter.enabled = enabled != 0;
                 }
-                ids::CHAPTERDISPLAY => {
-                    chapter.display.push(ChapterDisplay::parse(r, s)?);
+                Element{id: ids::CHAPTERDISPLAY, size: _,
+                        val: ElementType::Master(sub_elements)} => {
+                    chapter.display.push(ChapterDisplay::build(sub_elements));
                 }
-                _ => {ebml::skip(r, s)?;}
+                _ => {}
             }
-
-            size -= s;
-            size -= len;
         }
-
-        Ok(chapter)
+        chapter
     }
 }
 
@@ -787,27 +746,21 @@ impl ChapterDisplay {
         ChapterDisplay{string: String::new(), language: String::new()}
     }
 
-    fn parse(r: &mut io::Read, mut size: u64) ->
-        Result<ChapterDisplay,MKVError> {
+    fn build(elements: Vec<Element>) -> ChapterDisplay {
         let mut display = ChapterDisplay::new();
-
-        while size > 0 {
-            let (i, s, len) = ebml::read_element_id_size(r)?;
-
-            match i {
-                ids::CHAPSTRING => {
-                    display.string = ebml::read_utf8(r, s)?;
+        for e in elements {
+            match e {
+                Element{id: ids::CHAPSTRING, size: _,
+                        val: ElementType::UTF8(string)} => {
+                    display.string = string;
                 }
-                ids::CHAPLANGUAGE => {
-                    display.language = ebml::read_string(r, s)?;
+                Element{id: ids::CHAPLANGUAGE, size: _,
+                        val: ElementType::String(language)} => {
+                    display.language = language;
                 }
-                _ => {ebml::skip(r, s)?;}
+                _ => {}
             }
-
-            size -= s;
-            size -= len;
         }
-
-        Ok(display)
+        display
     }
 }
