@@ -1,4 +1,4 @@
-//! A library for MKV file metadata parsing functionality
+//! A library for Matroska file metadata parsing functionality
 //!
 //! Implemented as a set of nested structs with public values
 //! which one can use directly.
@@ -6,13 +6,13 @@
 //! ## Example
 //! ```
 //! use std::fs::File;
-//! use mkv::MKV;
+//! use matroska::Matroska;
 //! let f = File::open("filename.mkv").unwrap();
-//! let mkv = MKV::open(f).unwrap();
+//! let matroska = Matroska::open(f).unwrap();
 //! println!("title : {:?}", mkv.info.title);
 //! ```
 //!
-//! For additional information about the MKV format, see the
+//! For additional information about the Matroska format, see the
 //! official [specification](https://matroska.org)
 
 #![warn(missing_docs)]
@@ -30,12 +30,12 @@ mod ids;
 use chrono::{DateTime, Duration};
 use chrono::offset::Utc;
 
-pub use ebml::MKVError;
+pub use ebml::MatroskaError;
 use ebml::{Element, ElementType};
 
-/// An MKV file
+/// A Matroska file
 #[derive(Debug)]
-pub struct MKV {
+pub struct Matroska {
     /// The file's Info segment
     pub info: Info,
     /// The file's Tracks segment
@@ -46,92 +46,96 @@ pub struct MKV {
     pub chapters: Vec<ChapterEdition>
 }
 
-impl MKV {
-    fn new() -> MKV {
-        MKV{info: Info::new(),
-            tracks: Vec::new(),
-            attachments: Vec::new(),
-            chapters: Vec::new()}
+impl Matroska {
+    fn new() -> Matroska {
+        Matroska{info: Info::new(),
+                 tracks: Vec::new(),
+                 attachments: Vec::new(),
+                 chapters: Vec::new()}
     }
 
-    /// Parses contents of open MKV file
-    pub fn open(mut file: File) -> Result<MKV,MKVError> {
+    /// Parses contents of open Matroska file
+    pub fn open(mut file: File) -> Result<Matroska,MatroskaError> {
         use std::io::Seek;
         use std::io::SeekFrom;
 
-        let mut mkv = MKV::new();
+        let mut matroska = Matroska::new();
 
         let (mut id_0, mut size_0, _) = ebml::read_element_id_size(&mut file)?;
         while id_0 != ids::SEGMENT {
             file.seek(SeekFrom::Current(size_0 as i64))
                 .map(|_| ())
-                .map_err(MKVError::Io)?;
+                .map_err(MatroskaError::Io)?;
             let (id, size, _) = ebml::read_element_id_size(&mut file)?;
             id_0 = id;
             size_0 = size;
         }
 
         let segment_start = file.seek(SeekFrom::Current(0))
-                                .map_err(MKVError::Io)?;
+                                .map_err(MatroskaError::Io)?;
 
         while size_0 > 0 {
             let (id_1, size_1, len) = ebml::read_element_id_size(&mut file)?;
             match id_1 {
                 ids::SEEKHEAD => {
+                    // if seektable encountered, populate file from that
                     let seektable = Seektable::parse(&mut file, size_1)?;
                     if let Some(pos) = seektable.get(ids::INFO) {
                         file.seek(SeekFrom::Start(pos + segment_start))
-                            .map_err(MKVError::Io)?;
+                            .map_err(MatroskaError::Io)?;
                         let (i, s, _) = ebml::read_element_id_size(&mut file)?;
                         assert_eq!(i, ids::INFO);
-                        mkv.info = Info::parse(&mut file, s)?;
+                        matroska.info = Info::parse(&mut file, s)?;
                     }
                     if let Some(pos) = seektable.get(ids::TRACKS) {
                         file.seek(SeekFrom::Start(pos + segment_start))
-                            .map_err(MKVError::Io)?;
+                            .map_err(MatroskaError::Io)?;
                         let (i, s, _) = ebml::read_element_id_size(&mut file)?;
                         assert_eq!(i, ids::TRACKS);
-                        mkv.tracks = Track::parse(&mut file, s)?;
+                        matroska.tracks = Track::parse(&mut file, s)?;
                     }
                     if let Some(pos) = seektable.get(ids::ATTACHMENTS) {
                         file.seek(SeekFrom::Start(pos + segment_start))
-                            .map_err(MKVError::Io)?;
+                            .map_err(MatroskaError::Io)?;
                         let (i, s, _) = ebml::read_element_id_size(&mut file)?;
                         assert_eq!(i, ids::ATTACHMENTS);
-                        mkv.attachments = Attachment::parse(&mut file, s)?;
+                        matroska.attachments = Attachment::parse(&mut file, s)?;
                     }
                     if let Some(pos) = seektable.get(ids::CHAPTERS) {
                         file.seek(SeekFrom::Start(pos + segment_start))
-                            .map_err(MKVError::Io)?;
+                            .map_err(MatroskaError::Io)?;
                         let (i, s, _) = ebml::read_element_id_size(&mut file)?;
                         assert_eq!(i, ids::CHAPTERS);
-                        mkv.chapters = ChapterEdition::parse(&mut file, s)?;
+                        matroska.chapters = ChapterEdition::parse(&mut file, s)?;
                     }
-                    return Ok(mkv)
+                    return Ok(matroska)
                 }
+                // if no seektable, populate file from parts
                 ids::INFO => {
-                    mkv.info = Info::parse(&mut file, size_1)?;
+                    matroska.info = Info::parse(&mut file, size_1)?;
                 }
                 ids::TRACKS => {
-                    mkv.tracks = Track::parse(&mut file, size_1)?;
+                    matroska.tracks = Track::parse(&mut file, size_1)?;
                 }
                 ids::ATTACHMENTS => {
-                    mkv.attachments = Attachment::parse(&mut file, size_1)?;
+                    matroska.attachments =
+                        Attachment::parse(&mut file, size_1)?;
                 }
                 ids::CHAPTERS => {
-                    mkv.chapters = ChapterEdition::parse(&mut file, size_1)?;
+                    matroska.chapters =
+                        ChapterEdition::parse(&mut file, size_1)?;
                 }
                 _ => {
                     file.seek(SeekFrom::Current(size_1 as i64))
                         .map(|_| ())
-                        .map_err(MKVError::Io)?;
+                        .map_err(MatroskaError::Io)?;
                 }
             }
             size_0 -= len;
             size_0 -= size_1;
         }
 
-        Ok(mkv)
+        Ok(matroska)
     }
 
     /// Returns all tracks with a type of "video"
@@ -171,7 +175,7 @@ impl Seektable {
         self.seek.get(&id).map(|&i| i)
     }
 
-    fn parse(r: &mut io::Read, size: u64) -> Result<Seektable,MKVError> {
+    fn parse(r: &mut io::Read, size: u64) -> Result<Seektable,MatroskaError> {
         let mut seektable = Seektable::new();
         for e in Element::parse_master(r, size)? {
             match e {
@@ -245,7 +249,7 @@ impl Info {
              writing_app: String::new()}
     }
 
-    fn parse(r: &mut io::Read, size: u64) -> Result<Info,MKVError> {
+    fn parse(r: &mut io::Read, size: u64) -> Result<Info,MatroskaError> {
         let mut info = Info::new();
         let mut timecode_scale = None;
         let mut duration = None;
@@ -339,7 +343,7 @@ impl Track {
               settings: Settings::None}
     }
 
-    fn parse(r: &mut io::Read, size: u64) -> Result<Vec<Track>,MKVError> {
+    fn parse(r: &mut io::Read, size: u64) -> Result<Vec<Track>,MatroskaError> {
         Element::parse_master(r, size).map(
             |elements| elements.into_iter().filter_map(|e| match e {
                 Element{id: ids::TRACKENTRY, size: _,
@@ -579,7 +583,7 @@ impl Attachment {
     }
 
     fn parse(r: &mut io::Read, size: u64) ->
-        Result<Vec<Attachment>,MKVError> {
+        Result<Vec<Attachment>,MatroskaError> {
         Element::parse_master(r, size).map(
             |elements| elements.into_iter().filter_map(|e| match e {
                 Element{id: ids::ATTACHEDFILE, size: _,
@@ -639,7 +643,7 @@ impl ChapterEdition {
     }
 
     fn parse(r: &mut io::Read, size: u64) ->
-        Result<Vec<ChapterEdition>,MKVError> {
+        Result<Vec<ChapterEdition>,MatroskaError> {
         Element::parse_master(r, size).map(
             |elements| elements.into_iter().filter_map(|e| match e {
                 Element{id: ids::EDITIONENTRY, size: _,

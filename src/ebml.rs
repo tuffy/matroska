@@ -5,7 +5,7 @@ use bitstream_io::{BitReader, BE};
 use chrono::DateTime;
 use chrono::offset::Utc;
 
-/// Some form of error when parsing MKV file
+/// An EBML tree element
 #[derive(Debug)]
 pub struct Element {
     pub id: u32,
@@ -14,25 +14,14 @@ pub struct Element {
 }
 
 impl Element {
-    pub fn parse(r: &mut io::Read) -> Result<Element,MKVError> {
+    pub fn parse(r: &mut io::Read) -> Result<Element,MatroskaError> {
         let (id, size, header_len) = read_element_id_size(r)?;
         let data = Element::parse_body(r, id, size)?;
         Ok(Element{id: id, size: header_len + size, val: data})
     }
 
-    pub fn parse_master(r: &mut io::Read, mut size: u64) ->
-        Result<Vec<Element>,MKVError> {
-        let mut elements = Vec::new();
-        while size > 0 {
-            let e = Element::parse(r)?;
-            size -= e.size;
-            elements.push(e);
-        }
-        Ok(elements)
-    }
-
     pub fn parse_body(r: &mut io::Read, id: u32, size: u64) ->
-        Result<ElementType,MKVError> {
+        Result<ElementType,MatroskaError> {
         match id {
             0x80 | 0x8E | 0x8F | 0xA0 | 0xA6 | 0xAE | 0xB6 | 0xB7 | 0xBB |
             0xC8 | 0xDB | 0xE0 | 0xE1 | 0xE2 | 0xE3 | 0xE4 | 0xE8 | 0xE9 |
@@ -97,6 +86,19 @@ impl Element {
             }
         }
     }
+
+    pub fn parse_master(r: &mut io::Read, mut size: u64) ->
+        Result<Vec<Element>,MatroskaError> {
+        let mut elements = Vec::new();
+        while size > 0 {
+            let e = Element::parse(r)?;
+            assert!(e.size <= size);
+            size -= e.size;
+            elements.push(e);
+        }
+        Ok(elements)
+    }
+
 }
 
 #[derive(Debug)]
@@ -111,9 +113,9 @@ pub enum ElementType {
     Date(DateTime<Utc>)
 }
 
-/// A possible error when parsing MKV file
+/// A possible error when parsing a Matroska file
 #[derive(Debug)]
-pub enum MKVError {
+pub enum MatroskaError {
     /// An I/O error
     Io(io::Error),
     /// An error decoding a UTF-8 string
@@ -131,104 +133,123 @@ pub enum MKVError {
 }
 
 pub fn read_element_id_size(reader: &mut io::Read) ->
-    Result<(u32,u64,u64),MKVError> {
+    Result<(u32,u64,u64),MatroskaError> {
     let mut r = BitReader::<BE>::new(reader);
     let (id, id_len) = read_element_id(&mut r)?;
     let (size, size_len) = read_element_size(&mut r)?;
     Ok((id, size, id_len + size_len))
 }
 
-fn read_element_id(r: &mut BitReader<BE>) -> Result<(u32,u64),MKVError> {
+fn read_element_id(r: &mut BitReader<BE>) -> Result<(u32,u64),MatroskaError> {
     match r.read_unary1() {
         Ok(0) => {
             r.read::<u32>(7)
-             .map_err(MKVError::Io)
+             .map_err(MatroskaError::Io)
              .map(|u| (0b10000000 | u, 1))
         }
         Ok(1) => {
             r.read::<u32>(6 + 8)
-             .map_err(MKVError::Io)
+             .map_err(MatroskaError::Io)
              .map(|u| ((0b01000000 << 8) | u, 2))
         }
         Ok(2) => {
             r.read::<u32>(5 + 16)
-             .map_err(MKVError::Io)
+             .map_err(MatroskaError::Io)
              .map(|u| ((0b00100000 << 16) | u, 3))
         }
         Ok(3) => {
             r.read::<u32>(4 + 24)
-             .map_err(MKVError::Io)
+             .map_err(MatroskaError::Io)
              .map(|u| ((0b00010000 << 24) | u, 4))
         }
-        Ok(_) => {Err(MKVError::InvalidID)}
-        Err(err) => {Err(MKVError::Io(err))}
+        Ok(_) => {Err(MatroskaError::InvalidID)}
+        Err(err) => {Err(MatroskaError::Io(err))}
     }
 }
 
-fn read_element_size(r: &mut BitReader<BE>) -> Result<(u64,u64),MKVError> {
+fn read_element_size(r: &mut BitReader<BE>) -> Result<(u64,u64),MatroskaError> {
     match r.read_unary1() {
-        Ok(0) => {r.read(7 + (0 * 8)).map(|s| (s, 1)).map_err(MKVError::Io)}
-        Ok(1) => {r.read(6 + (1 * 8)).map(|s| (s, 2)).map_err(MKVError::Io)}
-        Ok(2) => {r.read(5 + (2 * 8)).map(|s| (s, 3)).map_err(MKVError::Io)}
-        Ok(3) => {r.read(4 + (3 * 8)).map(|s| (s, 4)).map_err(MKVError::Io)}
-        Ok(4) => {r.read(3 + (4 * 8)).map(|s| (s, 5)).map_err(MKVError::Io)}
-        Ok(5) => {r.read(2 + (5 * 8)).map(|s| (s, 6)).map_err(MKVError::Io)}
-        Ok(6) => {r.read(1 + (6 * 8)).map(|s| (s, 7)).map_err(MKVError::Io)}
-        Ok(7) => {r.read(0 + (7 * 8)).map(|s| (s, 8)).map_err(MKVError::Io)}
-        Ok(_) => {Err(MKVError::InvalidSize)}
-        Err(err) => {Err(MKVError::Io(err))}
+        Ok(0) => {r.read(7 + (0 * 8))
+                   .map(|s| (s, 1))
+                   .map_err(MatroskaError::Io)}
+        Ok(1) => {r.read(6 + (1 * 8))
+                   .map(|s| (s, 2))
+                   .map_err(MatroskaError::Io)}
+        Ok(2) => {r.read(5 + (2 * 8))
+                   .map(|s| (s, 3))
+                   .map_err(MatroskaError::Io)}
+        Ok(3) => {r.read(4 + (3 * 8))
+                   .map(|s| (s, 4))
+                   .map_err(MatroskaError::Io)}
+        Ok(4) => {r.read(3 + (4 * 8))
+                   .map(|s| (s, 5))
+                   .map_err(MatroskaError::Io)}
+        Ok(5) => {r.read(2 + (5 * 8))
+                   .map(|s| (s, 6))
+                   .map_err(MatroskaError::Io)}
+        Ok(6) => {r.read(1 + (6 * 8))
+                   .map(|s| (s, 7))
+                   .map_err(MatroskaError::Io)}
+        Ok(7) => {r.read(0 + (7 * 8))
+                   .map(|s| (s, 8))
+                   .map_err(MatroskaError::Io)}
+        Ok(_) => {Err(MatroskaError::InvalidSize)}
+        Err(err) => {Err(MatroskaError::Io(err))}
     }
 }
 
-pub fn read_int(r: &mut io::Read, size: u64) -> Result<i64,MKVError> {
+pub fn read_int(r: &mut io::Read, size: u64) -> Result<i64,MatroskaError> {
     let mut r = BitReader::<BE>::new(r);
     match size {
         0 => {Ok(0)}
-        s @ 1...8 => {r.read_signed(s as u32 * 8).map_err(MKVError::Io)}
-        _ => {Err(MKVError::InvalidUint)}
+        s @ 1...8 => {r.read_signed(s as u32 * 8).map_err(MatroskaError::Io)}
+        _ => {Err(MatroskaError::InvalidUint)}
     }
 }
 
-pub fn read_uint(r: &mut io::Read, size: u64) -> Result<u64,MKVError> {
+pub fn read_uint(r: &mut io::Read, size: u64) -> Result<u64,MatroskaError> {
     let mut r = BitReader::<BE>::new(r);
     match size {
         0 => {Ok(0)}
-        s @ 1...8 => {r.read(s as u32 * 8).map_err(MKVError::Io)}
-        _ => {Err(MKVError::InvalidUint)}
+        s @ 1...8 => {r.read(s as u32 * 8).map_err(MatroskaError::Io)}
+        _ => {Err(MatroskaError::InvalidUint)}
     }
 }
 
-pub fn read_float(r: &mut io::Read, size: u64) -> Result<f64,MKVError> {
+pub fn read_float(r: &mut io::Read, size: u64) -> Result<f64,MatroskaError> {
     use std::mem;
 
     let mut r = BitReader::<BE>::new(r);
     match size {
         4 => {
-            let i: u32 = r.read(32).map_err(MKVError::Io)?;
+            let i: u32 = r.read(32).map_err(MatroskaError::Io)?;
             let f: f32 = unsafe {mem::transmute(i)};
             Ok(f as f64)
         }
         8 => {
-            let i: u64 = r.read(64).map_err(MKVError::Io)?;
+            let i: u64 = r.read(64).map_err(MatroskaError::Io)?;
             let f: f64 = unsafe {mem::transmute(i)};
             Ok(f)
         }
-        _ => {Err(MKVError::InvalidFloat)}
+        _ => {Err(MatroskaError::InvalidFloat)}
     }
 }
 
-pub fn read_string(r: &mut io::Read, size: u64) -> Result<String,MKVError> {
+pub fn read_string(r: &mut io::Read, size: u64) ->
+    Result<String,MatroskaError> {
     /*FIXME - limit this to ASCII set*/
     read_bin(r, size).and_then(
-        |bytes| String::from_utf8(bytes).map_err(MKVError::UTF8))
+        |bytes| String::from_utf8(bytes).map_err(MatroskaError::UTF8))
 }
 
-pub fn read_utf8(r: &mut io::Read, size: u64) -> Result<String,MKVError> {
+pub fn read_utf8(r: &mut io::Read, size: u64) ->
+    Result<String,MatroskaError> {
     read_bin(r, size).and_then(
-        |bytes| String::from_utf8(bytes).map_err(MKVError::UTF8))
+        |bytes| String::from_utf8(bytes).map_err(MatroskaError::UTF8))
 }
 
-pub fn read_date(r: &mut io::Read, size: u64) -> Result<DateTime<Utc>,MKVError> {
+pub fn read_date(r: &mut io::Read, size: u64) ->
+    Result<DateTime<Utc>,MatroskaError> {
     if size == 8 {
         use chrono::Duration;
         use chrono::TimeZone;
@@ -238,13 +259,13 @@ pub fn read_date(r: &mut io::Read, size: u64) -> Result<DateTime<Utc>,MKVError> 
             Utc.ymd(2001, 1, 1)
                .and_hms(0, 0, 0) + Duration::nanoseconds(d))
     } else {
-        Err(MKVError::InvalidDate)
+        Err(MatroskaError::InvalidDate)
     }
 }
 
-pub fn read_bin(r: &mut io::Read, size: u64) -> Result<Vec<u8>,MKVError> {
+pub fn read_bin(r: &mut io::Read, size: u64) -> Result<Vec<u8>,MatroskaError> {
     /*FIXME - need to read this in chunks*/
     let mut buf = Vec::with_capacity(size as usize);
     buf.resize(size as usize, 0);
-    r.read_exact(&mut buf).map(|()| buf).map_err(MKVError::Io)
+    r.read_exact(&mut buf).map(|()| buf).map_err(MatroskaError::Io)
 }
