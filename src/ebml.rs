@@ -39,10 +39,10 @@ impl Element {
             0x1043A770 | 0x114D9B74 | 0x1254C367 | 0x1549A966 | 0x1654AE6B |
             0x18538067 | 0x1941A469 | 0x1A45DFA3 | 0x1B538667 | 0x1C53BB6B |
             0x1F43B675 => {
-                Element::parse_master(r, size).map(|e| ElementType::Master(e))
+                Element::parse_master(r, size).map(ElementType::Master)
             }
             0xFB | 0xFD | 0x537F | 0x75A2 => {
-                read_int(r, size).map(|i| ElementType::Int(i))
+                read_int(r, size).map(ElementType::Int)
             }
             0x83 | 0x88 | 0x89 | 0x91 | 0x92 | 0x96 | 0x97 | 0x98 | 0x9A |
             0x9B | 0x9C | 0x9D | 0x9F | 0xA7 | 0xAA | 0xAB | 0xB0 | 0xB2 |
@@ -61,17 +61,17 @@ impl Element {
             0x6922 | 0x6955 | 0x69BF | 0x69FC | 0x6DE7 | 0x6DF8 | 0x6EBC |
             0x6FAB | 0x73C4 | 0x73C5 | 0x7446 | 0x7E8A | 0x7E9A |
             0x234E7A | 0x23E383 | 0x2AD7B1 => {
-                read_uint(r, size).map(|u| ElementType::UInt(u))
+                read_uint(r, size).map(ElementType::UInt)
             }
             0x86 | 0x4282 | 0x437C | 0x437E | 0x447A | 0x4660 | 0x63CA |
             0x22B59C | 0x26B240 | 0x3B4040 => {
-                read_string(r, size).map(|s| ElementType::String(s))
+                read_string(r, size).map(ElementType::String)
             }
             0x85 |
             0x4487 | 0x45A3 | 0x466E | 0x467E | 0x4D80 |
             0x536E | 0x5654 | 0x5741 | 0x7384 | 0x7BA9 |
             0x258688 | 0x3A9697 | 0x3C83AB | 0x3E83BB => {
-                read_utf8(r, size).map(|u| ElementType::UTF8(u))
+                read_utf8(r, size).map(ElementType::UTF8)
             }
             0xA1 | 0xA2 | 0xA3 | 0xA4 | 0xA5 |
             0xAF | 0xBF | 0xC1 | 0xC4 | 0xEC |
@@ -79,18 +79,18 @@ impl Element {
             0x47E3 | 0x47E4 | 0x53AB | 0x63A2 | 0x6532 | 0x66A5 | 0x6933 |
             0x69A5 | 0x6E67 | 0x73A4 | 0x7D7B | 0x7EA5 | 0x7EB5 |
             0x2EB524 | 0x3CB923 | 0x3EB923 => {
-                read_bin(r, size).map(|b| ElementType::Binary(b))
+                read_bin(r, size).map(ElementType::Binary)
             }
             0xB5 | 0x4489 | 0x55D1 | 0x55D2 | 0x55D3 | 0x55D4 | 0x55D5 |
             0x55D6 | 0x55D7 | 0x55D8 | 0x55D9 | 0x55DA | 0x78B5 |
             0x23314F | 0x2383E3 | 0x2FB523 => {
-                read_float(r, size).map(|f| ElementType::Float(f))
+                read_float(r, size).map(ElementType::Float)
             }
             0x4461 => {
-                read_date(r, size).map(|d| ElementType::Date(d))
+                read_date(r, size).map(ElementType::Date)
             }
             _ => {
-                read_bin(r, size).map(|b| ElementType::Binary(b))
+                read_bin(r, size).map(ElementType::Binary)
             }
         }
     }
