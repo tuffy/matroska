@@ -14,7 +14,7 @@ Add this to your `Cargo.toml`
 
 ```toml
 [dependencies]
-matroska = "0.3"
+matroska = "0.4"
 ```
 
 and this to your crate root:
