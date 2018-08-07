@@ -25,9 +25,9 @@
 
 #![warn(missing_docs)]
 
-use std::io;
-use std::fs::File;
 use std::collections::BTreeMap;
+use std::fs::File;
+use std::io;
 use std::time::Duration;
 
 extern crate bitstream_io;
@@ -36,8 +36,8 @@ extern crate chrono;
 mod ebml;
 mod ids;
 
-use chrono::DateTime;
 use chrono::offset::Utc;
+use chrono::DateTime;
 
 pub use ebml::MatroskaError;
 use ebml::{Element, ElementType, MResult};
@@ -52,15 +52,17 @@ pub struct Matroska {
     /// The file's Attachments segment
     pub attachments: Vec<Attachment>,
     /// The file's Chapters segment
-    pub chapters: Vec<ChapterEdition>
+    pub chapters: Vec<ChapterEdition>,
 }
 
 impl Matroska {
     fn new() -> Matroska {
-        Matroska{info: Info::new(),
-                 tracks: Vec::new(),
-                 attachments: Vec::new(),
-                 chapters: Vec::new()}
+        Matroska {
+            info: Info::new(),
+            tracks: Vec::new(),
+            attachments: Vec::new(),
+            chapters: Vec::new(),
+        }
     }
 
     /// Parses contents of open Matroska file
@@ -80,8 +82,7 @@ impl Matroska {
             size_0 = size;
         }
 
-        let segment_start = file.seek(SeekFrom::Current(0))
-                                .map_err(MatroskaError::Io)?;
+        let segment_start = file.seek(SeekFrom::Current(0)).map_err(MatroskaError::Io)?;
 
         while size_0 > 0 {
             let (id_1, size_1, len) = ebml::read_element_id_size(&mut file)?;
@@ -117,7 +118,7 @@ impl Matroska {
                         assert_eq!(i, ids::CHAPTERS);
                         matroska.chapters = ChapterEdition::parse(&mut file, s)?;
                     }
-                    return Ok(matroska)
+                    return Ok(matroska);
                 }
                 // if no seektable, populate file from parts
                 ids::INFO => {
@@ -127,12 +128,10 @@ impl Matroska {
                     matroska.tracks = Track::parse(&mut file, size_1)?;
                 }
                 ids::ATTACHMENTS => {
-                    matroska.attachments =
-                        Attachment::parse(&mut file, size_1)?;
+                    matroska.attachments = Attachment::parse(&mut file, size_1)?;
                 }
                 ids::CHAPTERS => {
-                    matroska.chapters =
-                        ChapterEdition::parse(&mut file, size_1)?;
+                    matroska.chapters = ChapterEdition::parse(&mut file, size_1)?;
                 }
                 _ => {
                     file.seek(SeekFrom::Current(size_1 as i64))
@@ -149,34 +148,39 @@ impl Matroska {
 
     /// Returns all tracks with a type of "video"
     pub fn video_tracks(&self) -> Vec<&Track> {
-        self.tracks.iter()
-                   .filter(|t| t.tracktype == Tracktype::Video)
-                   .collect()
+        self.tracks
+            .iter()
+            .filter(|t| t.tracktype == Tracktype::Video)
+            .collect()
     }
 
     /// Returns all tracks with a type of "audio"
     pub fn audio_tracks(&self) -> Vec<&Track> {
-        self.tracks.iter()
-                   .filter(|t| t.tracktype == Tracktype::Audio)
-                   .collect()
+        self.tracks
+            .iter()
+            .filter(|t| t.tracktype == Tracktype::Audio)
+            .collect()
     }
 
     /// Returns all tracks with a type of "subtitle"
     pub fn subtitle_tracks(&self) -> Vec<&Track> {
-        self.tracks.iter()
-                   .filter(|t| t.tracktype == Tracktype::Subtitle)
-                   .collect()
+        self.tracks
+            .iter()
+            .filter(|t| t.tracktype == Tracktype::Subtitle)
+            .collect()
     }
 }
 
 #[derive(Debug)]
 struct Seektable {
-    seek: BTreeMap<u32,u64>
+    seek: BTreeMap<u32, u64>,
 }
 
 impl Seektable {
     fn new() -> Seektable {
-        Seektable{seek: BTreeMap::new()}
+        Seektable {
+            seek: BTreeMap::new(),
+        }
     }
 
     #[inline]
@@ -188,8 +192,11 @@ impl Seektable {
         let mut seektable = Seektable::new();
         for e in Element::parse_master(r, size)? {
             match e {
-                Element{id: ids::SEEK, size: _,
-                        val: ElementType::Master(sub_elements)} => {
+                Element {
+                    id: ids::SEEK,
+                    size: _,
+                    val: ElementType::Master(sub_elements),
+                } => {
                     let seek = Seek::build(sub_elements);
                     seektable.seek.insert(seek.id(), seek.position);
                 }
@@ -203,12 +210,15 @@ impl Seektable {
 #[derive(Debug)]
 struct Seek {
     id: Vec<u8>,
-    position: u64
+    position: u64,
 }
 
 impl Seek {
     fn new() -> Seek {
-        Seek{id: Vec::new(), position: 0}
+        Seek {
+            id: Vec::new(),
+            position: 0,
+        }
     }
 
     fn id(&self) -> u32 {
@@ -219,12 +229,18 @@ impl Seek {
         let mut seek = Seek::new();
         for e in elements {
             match e {
-                Element{id: ids::SEEKID, size: _,
-                        val: ElementType::Binary(id)} => {
+                Element {
+                    id: ids::SEEKID,
+                    size: _,
+                    val: ElementType::Binary(id),
+                } => {
                     seek.id = id;
                 }
-                Element{id: ids::SEEKPOSITION, size: _,
-                        val: ElementType::UInt(position)} => {
+                Element {
+                    id: ids::SEEKPOSITION,
+                    size: _,
+                    val: ElementType::UInt(position),
+                } => {
                     seek.position = position;
                 }
                 _ => {}
@@ -246,16 +262,18 @@ pub struct Info {
     /// The muxing application or library
     pub muxing_app: String,
     /// The writing application
-    pub writing_app: String
+    pub writing_app: String,
 }
 
 impl Info {
     fn new() -> Info {
-        Info{title: None,
-             duration: None,
-             date_utc: None,
-             muxing_app: String::new(),
-             writing_app: String::new()}
+        Info {
+            title: None,
+            duration: None,
+            date_utc: None,
+            muxing_app: String::new(),
+            writing_app: String::new(),
+        }
     }
 
     fn parse(r: &mut io::Read, size: u64) -> MResult<Info> {
@@ -265,28 +283,42 @@ impl Info {
 
         for e in Element::parse_master(r, size)? {
             match e {
-                Element{id: ids::TITLE, size: _,
-                        val: ElementType::UTF8(title)} => {
+                Element {
+                    id: ids::TITLE,
+                    size: _,
+                    val: ElementType::UTF8(title),
+                } => {
                     info.title = Some(title);
                 }
-                Element{id: ids::TIMECODESCALE, size: _,
-                        val: ElementType::UInt(scale)} => {
+                Element {
+                    id: ids::TIMECODESCALE,
+                    size: _,
+                    val: ElementType::UInt(scale),
+                } => {
                     timecode_scale = Some(scale);
                 }
-                Element{id: ids::DURATION, size: _,
-                        val: ElementType::Float(d)} => {
-                    duration = Some(d)
-                }
-                Element{id: ids::DATEUTC, size: _,
-                        val: ElementType::Date(date)} => {
-                    info.date_utc = Some(date)
-                }
-                Element{id: ids::MUXINGAPP, size: _,
-                        val: ElementType::UTF8(app)} => {
+                Element {
+                    id: ids::DURATION,
+                    size: _,
+                    val: ElementType::Float(d),
+                } => duration = Some(d),
+                Element {
+                    id: ids::DATEUTC,
+                    size: _,
+                    val: ElementType::Date(date),
+                } => info.date_utc = Some(date),
+                Element {
+                    id: ids::MUXINGAPP,
+                    size: _,
+                    val: ElementType::UTF8(app),
+                } => {
                     info.muxing_app = app;
                 }
-                Element{id: ids::WRITINGAPP, size: _,
-                        val: ElementType::UTF8(app)} => {
+                Element {
+                    id: ids::WRITINGAPP,
+                    size: _,
+                    val: ElementType::UTF8(app),
+                } => {
                     info.writing_app = app;
                 }
                 _ => {}
@@ -295,8 +327,7 @@ impl Info {
 
         if let Some(d) = duration {
             if let Some(t) = timecode_scale {
-                info.duration = Some(
-                    Duration::from_nanos((d * t as f64) as u64))
+                info.duration = Some(Duration::from_nanos((d * t as f64) as u64))
             }
         }
 
@@ -332,99 +363,145 @@ pub struct Track {
     /// The track's codec's human-readable name
     pub codec_name: Option<String>,
     /// The track's audio or video settings
-    pub settings: Settings
+    pub settings: Settings,
 }
 
 impl Track {
     fn new() -> Track {
-        Track{number: 0,
-              uid: 0,
-              tracktype: Tracktype::Unknown,
-              enabled: true,
-              default: true,
-              forced: false,
-              interlaced: true,
-              default_duration: None,
-              name: None,
-              language: None,
-              codec_id: String::new(),
-              codec_name: None,
-              settings: Settings::None}
+        Track {
+            number: 0,
+            uid: 0,
+            tracktype: Tracktype::Unknown,
+            enabled: true,
+            default: true,
+            forced: false,
+            interlaced: true,
+            default_duration: None,
+            name: None,
+            language: None,
+            codec_id: String::new(),
+            codec_name: None,
+            settings: Settings::None,
+        }
     }
 
     fn parse(r: &mut io::Read, size: u64) -> MResult<Vec<Track>> {
-        Element::parse_master(r, size).map(
-            |elements| elements.into_iter().filter_map(|e| match e {
-                Element{id: ids::TRACKENTRY, size: _,
-                        val: ElementType::Master(sub_elements)} => {
-                    Some(Track::build_entry(sub_elements))
-                }
-                _ => {None}
-            }).collect())
+        Element::parse_master(r, size).map(|elements| {
+            elements
+                .into_iter()
+                .filter_map(|e| match e {
+                    Element {
+                        id: ids::TRACKENTRY,
+                        size: _,
+                        val: ElementType::Master(sub_elements),
+                    } => Some(Track::build_entry(sub_elements)),
+                    _ => None,
+                })
+                .collect()
+        })
     }
 
     fn build_entry(elements: Vec<Element>) -> Track {
         let mut track = Track::new();
         for e in elements {
             match e {
-                Element{id: ids::TRACKNUMBER, size: _,
-                        val: ElementType::UInt(number)} => {
+                Element {
+                    id: ids::TRACKNUMBER,
+                    size: _,
+                    val: ElementType::UInt(number),
+                } => {
                     track.number = number;
                 }
-                Element{id: ids::TRACKUID, size: _,
-                        val: ElementType::UInt(uid)} => {
+                Element {
+                    id: ids::TRACKUID,
+                    size: _,
+                    val: ElementType::UInt(uid),
+                } => {
                     track.uid = uid;
                 }
-                Element{id: ids::TRACKTYPE, size: _,
-                        val: ElementType::UInt(tracktype)} => {
+                Element {
+                    id: ids::TRACKTYPE,
+                    size: _,
+                    val: ElementType::UInt(tracktype),
+                } => {
                     track.tracktype = Tracktype::new(tracktype);
                 }
-                Element{id: ids::FLAGENABLED, size: _,
-                        val: ElementType::UInt(enabled)} => {
+                Element {
+                    id: ids::FLAGENABLED,
+                    size: _,
+                    val: ElementType::UInt(enabled),
+                } => {
                     track.enabled = enabled != 0;
                 }
-                Element{id: ids::FLAGDEFAULT, size: _,
-                        val: ElementType::UInt(default)} => {
+                Element {
+                    id: ids::FLAGDEFAULT,
+                    size: _,
+                    val: ElementType::UInt(default),
+                } => {
                     track.default = default != 0;
                 }
-                Element{id: ids::FLAGFORCED, size: _,
-                        val: ElementType::UInt(forced)} => {
+                Element {
+                    id: ids::FLAGFORCED,
+                    size: _,
+                    val: ElementType::UInt(forced),
+                } => {
                     track.forced = forced != 0;
                 }
-                Element{id: ids::FLAGLACING, size: _,
-                        val: ElementType::UInt(lacing)} => {
+                Element {
+                    id: ids::FLAGLACING,
+                    size: _,
+                    val: ElementType::UInt(lacing),
+                } => {
                     track.interlaced = lacing != 0;
                 }
-                Element{id: ids::DEFAULTDURATION, size: _,
-                        val: ElementType::UInt(duration)} => {
-                    track.default_duration =
-                        Some(Duration::from_nanos(duration));
+                Element {
+                    id: ids::DEFAULTDURATION,
+                    size: _,
+                    val: ElementType::UInt(duration),
+                } => {
+                    track.default_duration = Some(Duration::from_nanos(duration));
                 }
-                Element{id: ids::NAME, size: _,
-                        val: ElementType::UTF8(name)} => {
+                Element {
+                    id: ids::NAME,
+                    size: _,
+                    val: ElementType::UTF8(name),
+                } => {
                     track.name = Some(name);
                 }
-                Element{id: ids::LANGUAGE, size: _,
-                        val: ElementType::String(language)} => {
+                Element {
+                    id: ids::LANGUAGE,
+                    size: _,
+                    val: ElementType::String(language),
+                } => {
                     track.language = Some(language);
                 }
-                Element{id: ids::CODEC_ID, size: _,
-                        val: ElementType::String(codec_id)} => {
+                Element {
+                    id: ids::CODEC_ID,
+                    size: _,
+                    val: ElementType::String(codec_id),
+                } => {
                     track.codec_id = codec_id;
                 }
-                Element{id: ids::CODEC_NAME, size: _,
-                        val: ElementType::UTF8(codec_name)} => {
+                Element {
+                    id: ids::CODEC_NAME,
+                    size: _,
+                    val: ElementType::UTF8(codec_name),
+                } => {
                     track.codec_name = Some(codec_name);
                 }
-                Element{id: ids::VIDEO, size: _,
-                        val: ElementType::Master(sub_elements)} => {
-                    track.settings =
-                        Settings::Video(Video::build(sub_elements));
+                Element {
+                    id: ids::VIDEO,
+                    size: _,
+                    val: ElementType::Master(sub_elements),
+                } => {
+                    track.settings = Settings::Video(Video::build(sub_elements));
                 }
-                Element{id: ids::AUDIO, size: _,
-                        val: ElementType::Master(sub_elements)} => {
-                    track.settings =
-                        Settings::Audio(Audio::build(sub_elements));
+                Element {
+                    id: ids::AUDIO,
+                    size: _,
+                    val: ElementType::Master(sub_elements),
+                } => {
+                    track.settings = Settings::Audio(Audio::build(sub_elements));
                 }
                 _ => {}
             }
@@ -451,20 +528,20 @@ pub enum Tracktype {
     /// A controls track
     Control,
     /// An unknown track type
-    Unknown
+    Unknown,
 }
 
 impl Tracktype {
     fn new(tracktype: u64) -> Tracktype {
         match tracktype {
-            0x01 => {Tracktype::Video}
-            0x02 => {Tracktype::Audio}
-            0x03 => {Tracktype::Complex}
-            0x10 => {Tracktype::Logo}
-            0x11 => {Tracktype::Subtitle}
-            0x12 => {Tracktype::Buttons}
-            0x20 => {Tracktype::Control}
-            _    => {Tracktype::Unknown}
+            0x01 => Tracktype::Video,
+            0x02 => Tracktype::Audio,
+            0x03 => Tracktype::Complex,
+            0x10 => Tracktype::Logo,
+            0x11 => Tracktype::Subtitle,
+            0x12 => Tracktype::Buttons,
+            0x20 => Tracktype::Control,
+            _ => Tracktype::Unknown,
         }
     }
 }
@@ -477,9 +554,8 @@ pub enum Settings {
     /// Video settings
     Video(Video),
     /// Audio settings
-    Audio(Audio)
+    Audio(Audio),
 }
-
 
 /// A video track's specifications
 #[derive(Debug)]
@@ -491,37 +567,49 @@ pub struct Video {
     /// Width of video frames to display
     pub display_width: Option<u64>,
     /// Height of video frames to display
-    pub display_height: Option<u64>
+    pub display_height: Option<u64>,
 }
 
 impl Video {
     fn new() -> Video {
-        Video{pixel_width: 0,
-              pixel_height: 0,
-              display_width: None,
-              display_height: None}
+        Video {
+            pixel_width: 0,
+            pixel_height: 0,
+            display_width: None,
+            display_height: None,
+        }
     }
 
     fn build(elements: Vec<Element>) -> Video {
         let mut video = Video::new();
         for e in elements {
             match e {
-                Element{id: ids::PIXELWIDTH, size: _,
-                        val: ElementType::UInt(width)} => {
+                Element {
+                    id: ids::PIXELWIDTH,
+                    size: _,
+                    val: ElementType::UInt(width),
+                } => {
                     video.pixel_width = width;
                 }
-                Element{id: ids::PIXELHEIGHT, size: _,
-                        val: ElementType::UInt(height)} => {
+                Element {
+                    id: ids::PIXELHEIGHT,
+                    size: _,
+                    val: ElementType::UInt(height),
+                } => {
                     video.pixel_height = height;
                 }
-                Element{id: ids::DISPLAYWIDTH, size: _,
-                        val: ElementType::UInt(width)} => {
+                Element {
+                    id: ids::DISPLAYWIDTH,
+                    size: _,
+                    val: ElementType::UInt(width),
+                } => {
                     video.display_width = Some(width);
                 }
-                Element{id: ids::DISPLAYHEIGHT, size: _,
-                        val: ElementType::UInt(height)} => {
-                    video.display_height = Some(height)
-                }
+                Element {
+                    id: ids::DISPLAYHEIGHT,
+                    size: _,
+                    val: ElementType::UInt(height),
+                } => video.display_height = Some(height),
                 _ => {}
             }
         }
@@ -537,30 +625,41 @@ pub struct Audio {
     /// The number of audio channels
     pub channels: u64,
     /// The bit depth of each sample
-    pub bit_depth: Option<u64>
+    pub bit_depth: Option<u64>,
 }
 
 impl Audio {
     fn new() -> Audio {
-        Audio{sample_rate: 0.0,
-              channels: 0,
-              bit_depth: None}
+        Audio {
+            sample_rate: 0.0,
+            channels: 0,
+            bit_depth: None,
+        }
     }
 
     fn build(elements: Vec<Element>) -> Audio {
         let mut audio = Audio::new();
         for e in elements {
             match e {
-                Element{id: ids::SAMPLINGFREQUENCY, size: _,
-                        val: ElementType::Float(frequency)} => {
+                Element {
+                    id: ids::SAMPLINGFREQUENCY,
+                    size: _,
+                    val: ElementType::Float(frequency),
+                } => {
                     audio.sample_rate = frequency;
                 }
-                Element{id: ids::CHANNELS, size: _,
-                        val: ElementType::UInt(channels)} => {
+                Element {
+                    id: ids::CHANNELS,
+                    size: _,
+                    val: ElementType::UInt(channels),
+                } => {
                     audio.channels = channels;
                 }
-                Element{id: ids::BITDEPTH, size: _,
-                        val: ElementType::UInt(bit_depth)} => {
+                Element {
+                    id: ids::BITDEPTH,
+                    size: _,
+                    val: ElementType::UInt(bit_depth),
+                } => {
                     audio.bit_depth = Some(bit_depth);
                 }
                 _ => {}
@@ -580,47 +679,65 @@ pub struct Attachment {
     /// The file's MIME type
     pub mime_type: String,
     /// The file's raw data
-    pub data: Vec<u8>
+    pub data: Vec<u8>,
 }
 
 impl Attachment {
     fn new() -> Attachment {
-        Attachment{description: None,
-                   name: String::new(),
-                   mime_type: String::new(),
-                   data: Vec::new()}
+        Attachment {
+            description: None,
+            name: String::new(),
+            mime_type: String::new(),
+            data: Vec::new(),
+        }
     }
 
-    fn parse(r: &mut io::Read, size: u64) ->
-        MResult<Vec<Attachment>> {
-        Element::parse_master(r, size).map(
-            |elements| elements.into_iter().filter_map(|e| match e {
-                Element{id: ids::ATTACHEDFILE, size: _,
-                        val: ElementType::Master(sub_elements)} => {
-                    Some(Attachment::build_entry(sub_elements))
-                }
-                _ => {None}
-            }).collect())
+    fn parse(r: &mut io::Read, size: u64) -> MResult<Vec<Attachment>> {
+        Element::parse_master(r, size).map(|elements| {
+            elements
+                .into_iter()
+                .filter_map(|e| match e {
+                    Element {
+                        id: ids::ATTACHEDFILE,
+                        size: _,
+                        val: ElementType::Master(sub_elements),
+                    } => Some(Attachment::build_entry(sub_elements)),
+                    _ => None,
+                })
+                .collect()
+        })
     }
 
     fn build_entry(elements: Vec<Element>) -> Attachment {
         let mut attachment = Attachment::new();
         for e in elements {
             match e {
-                Element{id: ids::FILEDESCRIPTION, size: _,
-                        val: ElementType::UTF8(description)} => {
+                Element {
+                    id: ids::FILEDESCRIPTION,
+                    size: _,
+                    val: ElementType::UTF8(description),
+                } => {
                     attachment.description = Some(description);
                 }
-                Element{id: ids::FILENAME, size: _,
-                        val: ElementType::UTF8(filename)} => {
+                Element {
+                    id: ids::FILENAME,
+                    size: _,
+                    val: ElementType::UTF8(filename),
+                } => {
                     attachment.name = filename;
                 }
-                Element{id: ids::FILEMIMETYPE, size: _,
-                        val: ElementType::String(mime_type)} => {
+                Element {
+                    id: ids::FILEMIMETYPE,
+                    size: _,
+                    val: ElementType::String(mime_type),
+                } => {
                     attachment.mime_type = mime_type;
                 }
-                Element{id: ids::FILEDATA, size: _,
-                        val: ElementType::Binary(data)} => {
+                Element {
+                    id: ids::FILEDATA,
+                    size: _,
+                    val: ElementType::Binary(data),
+                } => {
                     attachment.data = data;
                 }
                 _ => {}
@@ -640,47 +757,65 @@ pub struct ChapterEdition {
     /// Whether the order to play chapters is enforced
     pub ordered: bool,
     /// The individual chapter entries
-    pub chapters: Vec<Chapter>
+    pub chapters: Vec<Chapter>,
 }
 
 impl ChapterEdition {
     fn new() -> ChapterEdition {
-        ChapterEdition{hidden: false,
-                       default: false,
-                       ordered: false,
-                       chapters: Vec::new()}
+        ChapterEdition {
+            hidden: false,
+            default: false,
+            ordered: false,
+            chapters: Vec::new(),
+        }
     }
 
-    fn parse(r: &mut io::Read, size: u64) ->
-        MResult<Vec<ChapterEdition>> {
-        Element::parse_master(r, size).map(
-            |elements| elements.into_iter().filter_map(|e| match e {
-                Element{id: ids::EDITIONENTRY, size: _,
-                        val: ElementType::Master(sub_elements)} => {
-                    Some(ChapterEdition::build_entry(sub_elements))
-                }
-                _ => {None}
-            }).collect())
+    fn parse(r: &mut io::Read, size: u64) -> MResult<Vec<ChapterEdition>> {
+        Element::parse_master(r, size).map(|elements| {
+            elements
+                .into_iter()
+                .filter_map(|e| match e {
+                    Element {
+                        id: ids::EDITIONENTRY,
+                        size: _,
+                        val: ElementType::Master(sub_elements),
+                    } => Some(ChapterEdition::build_entry(sub_elements)),
+                    _ => None,
+                })
+                .collect()
+        })
     }
 
     fn build_entry(elements: Vec<Element>) -> ChapterEdition {
         let mut chapteredition = ChapterEdition::new();
         for e in elements {
             match e {
-                Element{id: ids::EDITIONFLAGHIDDEN, size: _,
-                        val: ElementType::UInt(hidden)} => {
+                Element {
+                    id: ids::EDITIONFLAGHIDDEN,
+                    size: _,
+                    val: ElementType::UInt(hidden),
+                } => {
                     chapteredition.hidden = hidden != 0;
                 }
-                Element{id: ids::EDITIONFLAGDEFAULT, size: _,
-                        val: ElementType::UInt(default)} => {
+                Element {
+                    id: ids::EDITIONFLAGDEFAULT,
+                    size: _,
+                    val: ElementType::UInt(default),
+                } => {
                     chapteredition.default = default != 0;
                 }
-                Element{id: ids::EDITIONFLAGORDERED, size: _,
-                        val: ElementType::UInt(ordered)} => {
+                Element {
+                    id: ids::EDITIONFLAGORDERED,
+                    size: _,
+                    val: ElementType::UInt(ordered),
+                } => {
                     chapteredition.ordered = ordered != 0;
                 }
-                Element{id: ids::CHAPTERATOM, size: _,
-                        val: ElementType::Master(sub_elements)} => {
+                Element {
+                    id: ids::CHAPTERATOM,
+                    size: _,
+                    val: ElementType::Master(sub_elements),
+                } => {
                     chapteredition.chapters.push(Chapter::build(sub_elements));
                 }
                 _ => {}
@@ -702,40 +837,57 @@ pub struct Chapter {
     /// Whether the chapter point should be enabled in the user interface
     pub enabled: bool,
     /// Contains all strings to use for displaying chapter
-    pub display: Vec<ChapterDisplay>
+    pub display: Vec<ChapterDisplay>,
 }
 
 impl Chapter {
     fn new() -> Chapter {
-        Chapter{time_start: Duration::default(),
-                time_end: None,
-                hidden: false,
-                enabled: false,
-                display: Vec::new()}
+        Chapter {
+            time_start: Duration::default(),
+            time_end: None,
+            hidden: false,
+            enabled: false,
+            display: Vec::new(),
+        }
     }
 
     fn build(elements: Vec<Element>) -> Chapter {
         let mut chapter = Chapter::new();
         for e in elements {
             match e {
-                Element{id: ids::CHAPTERTIMESTART, size: _,
-                        val: ElementType::UInt(start)} => {
+                Element {
+                    id: ids::CHAPTERTIMESTART,
+                    size: _,
+                    val: ElementType::UInt(start),
+                } => {
                     chapter.time_start = Duration::from_nanos(start);
                 }
-                Element{id: ids::CHAPTERTIMEEND, size: _,
-                        val: ElementType::UInt(end)} => {
+                Element {
+                    id: ids::CHAPTERTIMEEND,
+                    size: _,
+                    val: ElementType::UInt(end),
+                } => {
                     chapter.time_end = Some(Duration::from_nanos(end));
                 }
-                Element{id: ids::CHAPTERFLAGHIDDEN, size: _,
-                        val: ElementType::UInt(hidden)} => {
+                Element {
+                    id: ids::CHAPTERFLAGHIDDEN,
+                    size: _,
+                    val: ElementType::UInt(hidden),
+                } => {
                     chapter.hidden = hidden != 0;
                 }
-                Element{id: ids::CHAPTERFLAGENABLED, size: _,
-                        val: ElementType::UInt(enabled)} => {
+                Element {
+                    id: ids::CHAPTERFLAGENABLED,
+                    size: _,
+                    val: ElementType::UInt(enabled),
+                } => {
                     chapter.enabled = enabled != 0;
                 }
-                Element{id: ids::CHAPTERDISPLAY, size: _,
-                        val: ElementType::Master(sub_elements)} => {
+                Element {
+                    id: ids::CHAPTERDISPLAY,
+                    size: _,
+                    val: ElementType::Master(sub_elements),
+                } => {
                     chapter.display.push(ChapterDisplay::build(sub_elements));
                 }
                 _ => {}
@@ -751,24 +903,33 @@ pub struct ChapterDisplay {
     /// The user interface string
     pub string: String,
     /// The string's language
-    pub language: String
+    pub language: String,
 }
 
 impl ChapterDisplay {
     fn new() -> ChapterDisplay {
-        ChapterDisplay{string: String::new(), language: String::new()}
+        ChapterDisplay {
+            string: String::new(),
+            language: String::new(),
+        }
     }
 
     fn build(elements: Vec<Element>) -> ChapterDisplay {
         let mut display = ChapterDisplay::new();
         for e in elements {
             match e {
-                Element{id: ids::CHAPSTRING, size: _,
-                        val: ElementType::UTF8(string)} => {
+                Element {
+                    id: ids::CHAPSTRING,
+                    size: _,
+                    val: ElementType::UTF8(string),
+                } => {
                     display.string = string;
                 }
-                Element{id: ids::CHAPLANGUAGE, size: _,
-                        val: ElementType::String(language)} => {
+                Element {
+                    id: ids::CHAPLANGUAGE,
+                    size: _,
+                    val: ElementType::String(language),
+                } => {
                     display.language = language;
                 }
                 _ => {}
