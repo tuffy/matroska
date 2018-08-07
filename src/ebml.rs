@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::io;
+use std::{error, fmt, io};
 use std::string::FromUtf8Error;
 
 use bitstream_io::{BitReader, BE};
@@ -138,6 +138,30 @@ pub enum MatroskaError {
     InvalidFloat,
     /// An invalid date value
     InvalidDate
+}
+
+impl fmt::Display for MatroskaError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match self {
+            MatroskaError::Io(error) => error.fmt(f),
+            MatroskaError::UTF8(error) => error.fmt(f),
+            MatroskaError::InvalidID => write!(f, "invalid element ID"),
+            MatroskaError::InvalidSize => write!(f, "invalid element size"),
+            MatroskaError::InvalidUint => write!(f, "invalid unsigned integer"),
+            MatroskaError::InvalidFloat => write!(f, "invalid float"),
+            MatroskaError::InvalidDate => write!(f, "invalid date"),
+        }
+    }
+}
+
+impl error::Error for MatroskaError {
+    fn cause(&self) -> Option<&error::Error> {
+        match self {
+            MatroskaError::Io(error) => Some(error),
+            MatroskaError::UTF8(error) => Some(error),
+            _ => None,
+        }
+    }
 }
 
 pub fn read_element_id_size(reader: &mut io::Read) ->
