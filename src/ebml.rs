@@ -13,6 +13,8 @@ use bitstream_io::{BitReader, BE};
 use chrono::DateTime;
 use chrono::offset::Utc;
 
+pub type MResult<T> = Result<T,MatroskaError>;
+
 /// An EBML tree element
 #[derive(Debug)]
 pub struct Element {
@@ -22,14 +24,14 @@ pub struct Element {
 }
 
 impl Element {
-    pub fn parse(r: &mut io::Read) -> Result<Element,MatroskaError> {
+    pub fn parse(r: &mut io::Read) -> MResult<Element> {
         let (id, size, header_len) = read_element_id_size(r)?;
         let data = Element::parse_body(r, id, size)?;
         Ok(Element{id: id, size: header_len + size, val: data})
     }
 
     pub fn parse_body(r: &mut io::Read, id: u32, size: u64) ->
-        Result<ElementType,MatroskaError> {
+        MResult<ElementType> {
         match id {
             0x80 | 0x8E | 0x8F | 0xA0 | 0xA6 | 0xAE | 0xB6 | 0xB7 | 0xBB |
             0xC8 | 0xDB | 0xE0 | 0xE1 | 0xE2 | 0xE3 | 0xE4 | 0xE8 | 0xE9 |
@@ -96,7 +98,7 @@ impl Element {
     }
 
     pub fn parse_master(r: &mut io::Read, mut size: u64) ->
-        Result<Vec<Element>,MatroskaError> {
+        MResult<Vec<Element>> {
         let mut elements = Vec::new();
         while size > 0 {
             let e = Element::parse(r)?;
@@ -165,14 +167,14 @@ impl error::Error for MatroskaError {
 }
 
 pub fn read_element_id_size(reader: &mut io::Read) ->
-    Result<(u32,u64,u64),MatroskaError> {
+    MResult<(u32,u64,u64)> {
     let mut r = BitReader::<BE>::new(reader);
     let (id, id_len) = read_element_id(&mut r)?;
     let (size, size_len) = read_element_size(&mut r)?;
     Ok((id, size, id_len + size_len))
 }
 
-fn read_element_id(r: &mut BitReader<BE>) -> Result<(u32,u64),MatroskaError> {
+fn read_element_id(r: &mut BitReader<BE>) -> MResult<(u32,u64)> {
     match r.read_unary1() {
         Ok(0) => {
             r.read::<u32>(7)
@@ -199,7 +201,7 @@ fn read_element_id(r: &mut BitReader<BE>) -> Result<(u32,u64),MatroskaError> {
     }
 }
 
-fn read_element_size(r: &mut BitReader<BE>) -> Result<(u64,u64),MatroskaError> {
+fn read_element_size(r: &mut BitReader<BE>) -> MResult<(u64,u64)> {
     match r.read_unary1() {
         Ok(0) => {r.read(7 + (0 * 8))
                    .map(|s| (s, 1))
@@ -230,7 +232,7 @@ fn read_element_size(r: &mut BitReader<BE>) -> Result<(u64,u64),MatroskaError> {
     }
 }
 
-pub fn read_int(r: &mut io::Read, size: u64) -> Result<i64,MatroskaError> {
+pub fn read_int(r: &mut io::Read, size: u64) -> MResult<i64> {
     let mut r = BitReader::<BE>::new(r);
     match size {
         0 => {Ok(0)}
@@ -239,7 +241,7 @@ pub fn read_int(r: &mut io::Read, size: u64) -> Result<i64,MatroskaError> {
     }
 }
 
-pub fn read_uint(r: &mut io::Read, size: u64) -> Result<u64,MatroskaError> {
+pub fn read_uint(r: &mut io::Read, size: u64) -> MResult<u64> {
     let mut r = BitReader::<BE>::new(r);
     match size {
         0 => {Ok(0)}
@@ -248,7 +250,7 @@ pub fn read_uint(r: &mut io::Read, size: u64) -> Result<u64,MatroskaError> {
     }
 }
 
-pub fn read_float(r: &mut io::Read, size: u64) -> Result<f64,MatroskaError> {
+pub fn read_float(r: &mut io::Read, size: u64) -> MResult<f64> {
     use std::mem;
 
     let mut r = BitReader::<BE>::new(r);
@@ -268,20 +270,20 @@ pub fn read_float(r: &mut io::Read, size: u64) -> Result<f64,MatroskaError> {
 }
 
 pub fn read_string(r: &mut io::Read, size: u64) ->
-    Result<String,MatroskaError> {
+    MResult<String> {
     /*FIXME - limit this to ASCII set*/
     read_bin(r, size).and_then(
         |bytes| String::from_utf8(bytes).map_err(MatroskaError::UTF8))
 }
 
 pub fn read_utf8(r: &mut io::Read, size: u64) ->
-    Result<String,MatroskaError> {
+    MResult<String> {
     read_bin(r, size).and_then(
         |bytes| String::from_utf8(bytes).map_err(MatroskaError::UTF8))
 }
 
 pub fn read_date(r: &mut io::Read, size: u64) ->
-    Result<DateTime<Utc>,MatroskaError> {
+    MResult<DateTime<Utc>> {
     if size == 8 {
         use chrono::Duration;
         use chrono::TimeZone;
@@ -295,7 +297,7 @@ pub fn read_date(r: &mut io::Read, size: u64) ->
     }
 }
 
-pub fn read_bin(r: &mut io::Read, size: u64) -> Result<Vec<u8>,MatroskaError> {
+pub fn read_bin(r: &mut io::Read, size: u64) -> MResult<Vec<u8>> {
     /*FIXME - need to read this in chunks*/
     let mut buf = Vec::with_capacity(size as usize);
     buf.resize(size as usize, 0);

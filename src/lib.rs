@@ -40,7 +40,7 @@ use chrono::DateTime;
 use chrono::offset::Utc;
 
 pub use ebml::MatroskaError;
-use ebml::{Element, ElementType};
+use ebml::{Element, ElementType, MResult};
 
 /// A Matroska file
 #[derive(Debug)]
@@ -64,7 +64,7 @@ impl Matroska {
     }
 
     /// Parses contents of open Matroska file
-    pub fn open(mut file: File) -> Result<Matroska,MatroskaError> {
+    pub fn open(mut file: File) -> MResult<Matroska> {
         use std::io::Seek;
         use std::io::SeekFrom;
 
@@ -184,7 +184,7 @@ impl Seektable {
         self.seek.get(&id).map(|&i| i)
     }
 
-    fn parse(r: &mut io::Read, size: u64) -> Result<Seektable,MatroskaError> {
+    fn parse(r: &mut io::Read, size: u64) -> MResult<Seektable> {
         let mut seektable = Seektable::new();
         for e in Element::parse_master(r, size)? {
             match e {
@@ -258,7 +258,7 @@ impl Info {
              writing_app: String::new()}
     }
 
-    fn parse(r: &mut io::Read, size: u64) -> Result<Info,MatroskaError> {
+    fn parse(r: &mut io::Read, size: u64) -> MResult<Info> {
         let mut info = Info::new();
         let mut timecode_scale = None;
         let mut duration = None;
@@ -352,7 +352,7 @@ impl Track {
               settings: Settings::None}
     }
 
-    fn parse(r: &mut io::Read, size: u64) -> Result<Vec<Track>,MatroskaError> {
+    fn parse(r: &mut io::Read, size: u64) -> MResult<Vec<Track>> {
         Element::parse_master(r, size).map(
             |elements| elements.into_iter().filter_map(|e| match e {
                 Element{id: ids::TRACKENTRY, size: _,
@@ -592,7 +592,7 @@ impl Attachment {
     }
 
     fn parse(r: &mut io::Read, size: u64) ->
-        Result<Vec<Attachment>,MatroskaError> {
+        MResult<Vec<Attachment>> {
         Element::parse_master(r, size).map(
             |elements| elements.into_iter().filter_map(|e| match e {
                 Element{id: ids::ATTACHEDFILE, size: _,
@@ -652,7 +652,7 @@ impl ChapterEdition {
     }
 
     fn parse(r: &mut io::Read, size: u64) ->
-        Result<Vec<ChapterEdition>,MatroskaError> {
+        MResult<Vec<ChapterEdition>> {
         Element::parse_master(r, size).map(
             |elements| elements.into_iter().filter_map(|e| match e {
                 Element{id: ids::EDITIONENTRY, size: _,
