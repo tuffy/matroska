@@ -322,7 +322,7 @@ pub struct Track {
     /// If the track contains blocks using lacing
     pub interlaced: bool,
     /// Duration of each frame
-    pub defaultduration: Option<Duration>,
+    pub default_duration: Option<Duration>,
     /// A human-readable track name
     pub name: Option<String>,
     /// The track's language
@@ -344,7 +344,7 @@ impl Track {
               default: true,
               forced: false,
               interlaced: true,
-              defaultduration: None,
+              default_duration: None,
               name: None,
               language: None,
               codec_id: String::new(),
@@ -397,7 +397,7 @@ impl Track {
                 }
                 Element{id: ids::DEFAULTDURATION, size: _,
                         val: ElementType::UInt(duration)} => {
-                    track.defaultduration =
+                    track.default_duration =
                         Some(Duration::from_nanos(duration));
                 }
                 Element{id: ids::NAME, size: _,
