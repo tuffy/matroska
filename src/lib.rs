@@ -28,6 +28,7 @@
 use std::io;
 use std::fs::File;
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 extern crate bitstream_io;
 extern crate chrono;
@@ -35,7 +36,7 @@ extern crate chrono;
 mod ebml;
 mod ids;
 
-use chrono::{DateTime, Duration};
+use chrono::DateTime;
 use chrono::offset::Utc;
 
 pub use ebml::MatroskaError;
@@ -295,7 +296,7 @@ impl Info {
         if let Some(d) = duration {
             if let Some(t) = timecode_scale {
                 info.duration = Some(
-                    Duration::nanoseconds((d * t as f64) as i64))
+                    Duration::from_nanos((d * t as f64) as u64))
             }
         }
 
@@ -397,7 +398,7 @@ impl Track {
                 Element{id: ids::DEFAULTDURATION, size: _,
                         val: ElementType::UInt(duration)} => {
                     track.defaultduration =
-                        Some(Duration::nanoseconds(duration as i64));
+                        Some(Duration::from_nanos(duration));
                 }
                 Element{id: ids::NAME, size: _,
                         val: ElementType::UTF8(name)} => {
@@ -706,7 +707,7 @@ pub struct Chapter {
 
 impl Chapter {
     fn new() -> Chapter {
-        Chapter{time_start: Duration::nanoseconds(0),
+        Chapter{time_start: Duration::default(),
                 time_end: None,
                 hidden: false,
                 enabled: false,
@@ -719,11 +720,11 @@ impl Chapter {
             match e {
                 Element{id: ids::CHAPTERTIMESTART, size: _,
                         val: ElementType::UInt(start)} => {
-                    chapter.time_start = Duration::nanoseconds(start as i64);
+                    chapter.time_start = Duration::from_nanos(start);
                 }
                 Element{id: ids::CHAPTERTIMEEND, size: _,
                         val: ElementType::UInt(end)} => {
-                    chapter.time_end = Some(Duration::nanoseconds(end as i64));
+                    chapter.time_end = Some(Duration::from_nanos(end));
                 }
                 Element{id: ids::CHAPTERFLAGHIDDEN, size: _,
                         val: ElementType::UInt(hidden)} => {
