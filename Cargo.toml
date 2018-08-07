@@ -5,7 +5,7 @@ keywords = ["matroska", "mkv"]
 version = "0.4.0"
 authors = ["Brian Langenberger <bjl@usa.net>"]
 license = "MIT/Apache-2.0"
-documentation = "https://tuffy.github.io/matroska/"
+documentation = "https://docs.rs/matroska/"
 homepage = "https://github.com/tuffy/matroska"
 repository = "https://github.com/tuffy/matroska"
 
