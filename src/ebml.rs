@@ -9,11 +9,13 @@
 use std::string::FromUtf8Error;
 use std::{error, fmt, io};
 
-use bitstream_io::{BitReader, BE};
+use bitstream_io;
 use chrono::offset::Utc;
 use chrono::DateTime;
 
 pub type MResult<T> = Result<T, MatroskaError>;
+
+type BitReader<'a> = bitstream_io::BitReader<&'a mut io::Read, bitstream_io::BigEndian>;
 
 /// An EBML tree element
 #[derive(Debug)]
@@ -145,13 +147,13 @@ impl error::Error for MatroskaError {
 }
 
 pub fn read_element_id_size(reader: &mut io::Read) -> MResult<(u32, u64, u64)> {
-    let mut r = BitReader::<BE>::new(reader);
+    let mut r = BitReader::new(reader);
     let (id, id_len) = read_element_id(&mut r)?;
     let (size, size_len) = read_element_size(&mut r)?;
     Ok((id, size, id_len + size_len))
 }
 
-fn read_element_id(r: &mut BitReader<BE>) -> MResult<(u32, u64)> {
+fn read_element_id(r: &mut BitReader) -> MResult<(u32, u64)> {
     match r.read_unary1() {
         Ok(0) => r
             .read::<u32>(7)
@@ -174,7 +176,7 @@ fn read_element_id(r: &mut BitReader<BE>) -> MResult<(u32, u64)> {
     }
 }
 
-fn read_element_size(r: &mut BitReader<BE>) -> MResult<(u64, u64)> {
+fn read_element_size(r: &mut BitReader) -> MResult<(u64, u64)> {
     match r.read_unary1() {
         Ok(0) => r
             .read(7 + (0 * 8))
@@ -214,7 +216,7 @@ fn read_element_size(r: &mut BitReader<BE>) -> MResult<(u64, u64)> {
 }
 
 pub fn read_int(r: &mut io::Read, size: u64) -> MResult<i64> {
-    let mut r = BitReader::<BE>::new(r);
+    let mut r = BitReader::new(r);
     match size {
         0 => Ok(0),
         s @ 1...8 => r.read_signed(s as u32 * 8).map_err(MatroskaError::Io),
@@ -223,7 +225,7 @@ pub fn read_int(r: &mut io::Read, size: u64) -> MResult<i64> {
 }
 
 pub fn read_uint(r: &mut io::Read, size: u64) -> MResult<u64> {
-    let mut r = BitReader::<BE>::new(r);
+    let mut r = BitReader::new(r);
     match size {
         0 => Ok(0),
         s @ 1...8 => r.read(s as u32 * 8).map_err(MatroskaError::Io),
@@ -234,7 +236,7 @@ pub fn read_uint(r: &mut io::Read, size: u64) -> MResult<u64> {
 pub fn read_float(r: &mut io::Read, size: u64) -> MResult<f64> {
     use std::mem;
 
-    let mut r = BitReader::<BE>::new(r);
+    let mut r = BitReader::new(r);
     match size {
         4 => {
             let i: u32 = r.read(32).map_err(MatroskaError::Io)?;
