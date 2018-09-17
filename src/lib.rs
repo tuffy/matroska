@@ -185,22 +185,20 @@ impl Seektable {
 
     #[inline]
     fn get(&self, id: u32) -> Option<u64> {
-        self.seek.get(&id).map(|&i| i)
+        self.seek.get(&id).cloned()
     }
 
     fn parse(r: &mut io::Read, size: u64) -> MResult<Seektable> {
         let mut seektable = Seektable::new();
         for e in Element::parse_master(r, size)? {
-            match e {
-                Element {
-                    id: ids::SEEK,
-                    size: _,
-                    val: ElementType::Master(sub_elements),
-                } => {
-                    let seek = Seek::build(sub_elements);
-                    seektable.seek.insert(seek.id(), seek.position);
-                }
-                _ => {}
+            if let Element {
+                id: ids::SEEK,
+                val: ElementType::Master(sub_elements),
+                ..
+            } = e
+            {
+                let seek = Seek::build(sub_elements);
+                seektable.seek.insert(seek.id(), seek.position);
             }
         }
         Ok(seektable)
@@ -222,7 +220,7 @@ impl Seek {
     }
 
     fn id(&self) -> u32 {
-        self.id.iter().fold(0, |acc, i| (acc << 8) | *i as u32)
+        self.id.iter().fold(0, |acc, i| (acc << 8) | u32::from(*i))
     }
 
     fn build(elements: Vec<Element>) -> Seek {
@@ -231,15 +229,15 @@ impl Seek {
             match e {
                 Element {
                     id: ids::SEEKID,
-                    size: _,
                     val: ElementType::Binary(id),
+                    ..
                 } => {
                     seek.id = id;
                 }
                 Element {
                     id: ids::SEEKPOSITION,
-                    size: _,
                     val: ElementType::UInt(position),
+                    ..
                 } => {
                     seek.position = position;
                 }
@@ -285,39 +283,39 @@ impl Info {
             match e {
                 Element {
                     id: ids::TITLE,
-                    size: _,
                     val: ElementType::UTF8(title),
+                    ..
                 } => {
                     info.title = Some(title);
                 }
                 Element {
                     id: ids::TIMECODESCALE,
-                    size: _,
                     val: ElementType::UInt(scale),
+                    ..
                 } => {
                     timecode_scale = Some(scale);
                 }
                 Element {
                     id: ids::DURATION,
-                    size: _,
                     val: ElementType::Float(d),
+                    ..
                 } => duration = Some(d),
                 Element {
                     id: ids::DATEUTC,
-                    size: _,
                     val: ElementType::Date(date),
+                    ..
                 } => info.date_utc = Some(date),
                 Element {
                     id: ids::MUXINGAPP,
-                    size: _,
                     val: ElementType::UTF8(app),
+                    ..
                 } => {
                     info.muxing_app = app;
                 }
                 Element {
                     id: ids::WRITINGAPP,
-                    size: _,
                     val: ElementType::UTF8(app),
+                    ..
                 } => {
                     info.writing_app = app;
                 }
@@ -392,12 +390,11 @@ impl Track {
                 .filter_map(|e| match e {
                     Element {
                         id: ids::TRACKENTRY,
-                        size: _,
                         val: ElementType::Master(sub_elements),
+                        ..
                     } => Some(Track::build_entry(sub_elements)),
                     _ => None,
-                })
-                .collect()
+                }).collect()
         })
     }
 
@@ -407,99 +404,99 @@ impl Track {
             match e {
                 Element {
                     id: ids::TRACKNUMBER,
-                    size: _,
                     val: ElementType::UInt(number),
+                    ..
                 } => {
                     track.number = number;
                 }
                 Element {
                     id: ids::TRACKUID,
-                    size: _,
                     val: ElementType::UInt(uid),
+                    ..
                 } => {
                     track.uid = uid;
                 }
                 Element {
                     id: ids::TRACKTYPE,
-                    size: _,
                     val: ElementType::UInt(tracktype),
+                    ..
                 } => {
                     track.tracktype = Tracktype::new(tracktype);
                 }
                 Element {
                     id: ids::FLAGENABLED,
-                    size: _,
                     val: ElementType::UInt(enabled),
+                    ..
                 } => {
                     track.enabled = enabled != 0;
                 }
                 Element {
                     id: ids::FLAGDEFAULT,
-                    size: _,
                     val: ElementType::UInt(default),
+                    ..
                 } => {
                     track.default = default != 0;
                 }
                 Element {
                     id: ids::FLAGFORCED,
-                    size: _,
                     val: ElementType::UInt(forced),
+                    ..
                 } => {
                     track.forced = forced != 0;
                 }
                 Element {
                     id: ids::FLAGLACING,
-                    size: _,
                     val: ElementType::UInt(lacing),
+                    ..
                 } => {
                     track.interlaced = lacing != 0;
                 }
                 Element {
                     id: ids::DEFAULTDURATION,
-                    size: _,
                     val: ElementType::UInt(duration),
+                    ..
                 } => {
                     track.default_duration = Some(Duration::from_nanos(duration));
                 }
                 Element {
                     id: ids::NAME,
-                    size: _,
                     val: ElementType::UTF8(name),
+                    ..
                 } => {
                     track.name = Some(name);
                 }
                 Element {
                     id: ids::LANGUAGE,
-                    size: _,
                     val: ElementType::String(language),
+                    ..
                 } => {
                     track.language = Some(language);
                 }
                 Element {
                     id: ids::CODEC_ID,
-                    size: _,
                     val: ElementType::String(codec_id),
+                    ..
                 } => {
                     track.codec_id = codec_id;
                 }
                 Element {
                     id: ids::CODEC_NAME,
-                    size: _,
                     val: ElementType::UTF8(codec_name),
+                    ..
                 } => {
                     track.codec_name = Some(codec_name);
                 }
                 Element {
                     id: ids::VIDEO,
-                    size: _,
                     val: ElementType::Master(sub_elements),
+                    ..
                 } => {
                     track.settings = Settings::Video(Video::build(sub_elements));
                 }
                 Element {
                     id: ids::AUDIO,
-                    size: _,
                     val: ElementType::Master(sub_elements),
+                    ..
                 } => {
                     track.settings = Settings::Audio(Audio::build(sub_elements));
                 }
@@ -586,29 +583,29 @@ impl Video {
             match e {
                 Element {
                     id: ids::PIXELWIDTH,
-                    size: _,
                     val: ElementType::UInt(width),
+                    ..
                 } => {
                     video.pixel_width = width;
                 }
                 Element {
                     id: ids::PIXELHEIGHT,
-                    size: _,
                     val: ElementType::UInt(height),
+                    ..
                 } => {
                     video.pixel_height = height;
                 }
                 Element {
                     id: ids::DISPLAYWIDTH,
-                    size: _,
                     val: ElementType::UInt(width),
+                    ..
                 } => {
                     video.display_width = Some(width);
                 }
                 Element {
                     id: ids::DISPLAYHEIGHT,
-                    size: _,
                     val: ElementType::UInt(height),
+                    ..
                 } => video.display_height = Some(height),
                 _ => {}
             }
@@ -643,22 +640,22 @@ impl Audio {
             match e {
                 Element {
                     id: ids::SAMPLINGFREQUENCY,
-                    size: _,
                     val: ElementType::Float(frequency),
+                    ..
                 } => {
                     audio.sample_rate = frequency;
                 }
                 Element {
                     id: ids::CHANNELS,
-                    size: _,
                     val: ElementType::UInt(channels),
+                    ..
                 } => {
                     audio.channels = channels;
                 }
                 Element {
                     id: ids::BITDEPTH,
-                    size: _,
                     val: ElementType::UInt(bit_depth),
+                    ..
                 } => {
                     audio.bit_depth = Some(bit_depth);
                 }
@@ -699,12 +696,11 @@ impl Attachment {
                 .filter_map(|e| match e {
                     Element {
                         id: ids::ATTACHEDFILE,
-                        size: _,
                         val: ElementType::Master(sub_elements),
+                        ..
                     } => Some(Attachment::build_entry(sub_elements)),
                     _ => None,
-                })
-                .collect()
+                }).collect()
         })
     }
 
@@ -714,29 +710,29 @@ impl Attachment {
             match e {
                 Element {
                     id: ids::FILEDESCRIPTION,
-                    size: _,
                     val: ElementType::UTF8(description),
+                    ..
                 } => {
                     attachment.description = Some(description);
                 }
                 Element {
                     id: ids::FILENAME,
-                    size: _,
                     val: ElementType::UTF8(filename),
+                    ..
                 } => {
                     attachment.name = filename;
                 }
                 Element {
                     id: ids::FILEMIMETYPE,
-                    size: _,
                     val: ElementType::String(mime_type),
+                    ..
                 } => {
                     attachment.mime_type = mime_type;
                 }
                 Element {
                     id: ids::FILEDATA,
-                    size: _,
                     val: ElementType::Binary(data),
+                    ..
                 } => {
                     attachment.data = data;
                 }
@@ -777,12 +773,11 @@ impl ChapterEdition {
                 .filter_map(|e| match e {
                     Element {
                         id: ids::EDITIONENTRY,
-                        size: _,
                         val: ElementType::Master(sub_elements),
+                        ..
                     } => Some(ChapterEdition::build_entry(sub_elements)),
                     _ => None,
-                })
-                .collect()
+                }).collect()
         })
     }
 
@@ -792,29 +787,29 @@ impl ChapterEdition {
             match e {
                 Element {
                     id: ids::EDITIONFLAGHIDDEN,
-                    size: _,
                     val: ElementType::UInt(hidden),
+                    ..
                 } => {
                     chapteredition.hidden = hidden != 0;
                 }
                 Element {
                     id: ids::EDITIONFLAGDEFAULT,
-                    size: _,
                     val: ElementType::UInt(default),
+                    ..
                 } => {
                     chapteredition.default = default != 0;
                 }
                 Element {
                     id: ids::EDITIONFLAGORDERED,
-                    size: _,
                     val: ElementType::UInt(ordered),
+                    ..
                 } => {
                     chapteredition.ordered = ordered != 0;
                 }
                 Element {
                     id: ids::CHAPTERATOM,
-                    size: _,
                     val: ElementType::Master(sub_elements),
+                    ..
                 } => {
                     chapteredition.chapters.push(Chapter::build(sub_elements));
                 }
@@ -857,36 +852,36 @@ impl Chapter {
             match e {
                 Element {
                     id: ids::CHAPTERTIMESTART,
-                    size: _,
                     val: ElementType::UInt(start),
+                    ..
                 } => {
                     chapter.time_start = Duration::from_nanos(start);
                 }
                 Element {
                     id: ids::CHAPTERTIMEEND,
-                    size: _,
                     val: ElementType::UInt(end),
+                    ..
                 } => {
                     chapter.time_end = Some(Duration::from_nanos(end));
                 }
                 Element {
                     id: ids::CHAPTERFLAGHIDDEN,
-                    size: _,
                     val: ElementType::UInt(hidden),
+                    ..
                 } => {
                     chapter.hidden = hidden != 0;
                 }
                 Element {
                     id: ids::CHAPTERFLAGENABLED,
-                    size: _,
                     val: ElementType::UInt(enabled),
+                    ..
                 } => {
                     chapter.enabled = enabled != 0;
                 }
                 Element {
                     id: ids::CHAPTERDISPLAY,
-                    size: _,
                     val: ElementType::Master(sub_elements),
+                    ..
                 } => {
                     chapter.display.push(ChapterDisplay::build(sub_elements));
                 }
@@ -920,15 +915,15 @@ impl ChapterDisplay {
             match e {
                 Element {
                     id: ids::CHAPSTRING,
-                    size: _,
                     val: ElementType::UTF8(string),
+                    ..
                 } => {
                     display.string = string;
                 }
                 Element {
                     id: ids::CHAPLANGUAGE,
-                    size: _,
                     val: ElementType::String(language),
+                    ..
                 } => {
                     display.language = language;
                 }

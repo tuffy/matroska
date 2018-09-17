@@ -28,11 +28,11 @@ pub struct Element {
 impl Element {
     pub fn parse(r: &mut io::Read) -> MResult<Element> {
         let (id, size, header_len) = read_element_id_size(r)?;
-        let data = Element::parse_body(r, id, size)?;
+        let val = Element::parse_body(r, id, size)?;
         Ok(Element {
-            id: id,
+            id,
             size: header_len + size,
-            val: data,
+            val,
         })
     }
 
@@ -41,9 +41,9 @@ impl Element {
             0x80 | 0x8E | 0x8F | 0xA0 | 0xA6 | 0xAE | 0xB6 | 0xB7 | 0xBB | 0xC8 | 0xDB | 0xE0
             | 0xE1 | 0xE2 | 0xE3 | 0xE4 | 0xE8 | 0xE9 | 0x45B9 | 0x4DBB | 0x5034 | 0x5035
             | 0x55B0 | 0x55D0 | 0x5854 | 0x61A7 | 0x6240 | 0x63C0 | 0x6624 | 0x67C8 | 0x6911
-            | 0x6924 | 0x6944 | 0x6D80 | 0x7373 | 0x75A1 | 0x7E5B | 0x7E7B | 0x1043A770
-            | 0x114D9B74 | 0x1254C367 | 0x1549A966 | 0x1654AE6B | 0x18538067 | 0x1941A469
-            | 0x1A45DFA3 | 0x1B538667 | 0x1C53BB6B | 0x1F43B675 => {
+            | 0x6924 | 0x6944 | 0x6D80 | 0x7373 | 0x75A1 | 0x7E5B | 0x7E7B | 0x1043_A770
+            | 0x114D_9B74 | 0x1254_C367 | 0x1549_A966 | 0x1654_AE6B | 0x1853_8067 | 0x1941_A469
+            | 0x1A45_DFA3 | 0x1B53_8667 | 0x1C53_BB6B | 0x1F43_B675 => {
                 Element::parse_master(r, size).map(ElementType::Master)
             }
             0xFB | 0xFD | 0x537F | 0x75A2 => read_int(r, size).map(ElementType::Int),
@@ -59,19 +59,23 @@ impl Element {
             | 0x55BC | 0x55BD | 0x55EE | 0x56AA | 0x56BB | 0x58D7 | 0x6264 | 0x63C3 | 0x63C4
             | 0x63C5 | 0x63C6 | 0x63C9 | 0x66BF | 0x66FC | 0x68CA | 0x6922 | 0x6955 | 0x69BF
             | 0x69FC | 0x6DE7 | 0x6DF8 | 0x6EBC | 0x6FAB | 0x73C4 | 0x73C5 | 0x7446 | 0x7E8A
-            | 0x7E9A | 0x234E7A | 0x23E383 | 0x2AD7B1 => read_uint(r, size).map(ElementType::UInt),
-            0x86 | 0x4282 | 0x437C | 0x437E | 0x447A | 0x4660 | 0x63CA | 0x22B59C | 0x26B240
-            | 0x3B4040 => read_string(r, size).map(ElementType::String),
+            | 0x7E9A | 0x23_4E7A | 0x23_E383 | 0x2A_D7B1 => {
+                read_uint(r, size).map(ElementType::UInt)
+            }
+            0x86 | 0x4282 | 0x437C | 0x437E | 0x447A | 0x4660 | 0x63CA | 0x22_B59C | 0x26_B240
+            | 0x3B_4040 => read_string(r, size).map(ElementType::String),
             0x85 | 0x4487 | 0x45A3 | 0x466E | 0x467E | 0x4D80 | 0x536E | 0x5654 | 0x5741
-            | 0x7384 | 0x7BA9 | 0x258688 | 0x3A9697 | 0x3C83AB | 0x3E83BB => {
+            | 0x7384 | 0x7BA9 | 0x25_8688 | 0x3A_9697 | 0x3C_83AB | 0x3E_83BB => {
                 read_utf8(r, size).map(ElementType::UTF8)
             }
             0xA1 | 0xA2 | 0xA3 | 0xA4 | 0xA5 | 0xAF | 0xBF | 0xC1 | 0xC4 | 0xEC | 0x4255
             | 0x4444 | 0x4485 | 0x450D | 0x465C | 0x4675 | 0x47E2 | 0x47E3 | 0x47E4 | 0x53AB
             | 0x63A2 | 0x6532 | 0x66A5 | 0x6933 | 0x69A5 | 0x6E67 | 0x73A4 | 0x7D7B | 0x7EA5
-            | 0x7EB5 | 0x2EB524 | 0x3CB923 | 0x3EB923 => read_bin(r, size).map(ElementType::Binary),
+            | 0x7EB5 | 0x2E_B524 | 0x3C_B923 | 0x3E_B923 => {
+                read_bin(r, size).map(ElementType::Binary)
+            }
             0xB5 | 0x4489 | 0x55D1 | 0x55D2 | 0x55D3 | 0x55D4 | 0x55D5 | 0x55D6 | 0x55D7
-            | 0x55D8 | 0x55D9 | 0x55DA | 0x78B5 | 0x23314F | 0x2383E3 | 0x2FB523 => {
+            | 0x55D8 | 0x55D9 | 0x55DA | 0x78B5 | 0x23_314F | 0x23_83E3 | 0x2F_B523 => {
                 read_float(r, size).map(ElementType::Float)
             }
             0x4461 => read_date(r, size).map(ElementType::Date),
@@ -158,19 +162,19 @@ fn read_element_id(r: &mut BitReader) -> MResult<(u32, u64)> {
         Ok(0) => r
             .read::<u32>(7)
             .map_err(MatroskaError::Io)
-            .map(|u| (0b10000000 | u, 1)),
+            .map(|u| (0b1000_0000 | u, 1)),
         Ok(1) => r
             .read::<u32>(6 + 8)
             .map_err(MatroskaError::Io)
-            .map(|u| ((0b01000000 << 8) | u, 2)),
+            .map(|u| ((0b0100_0000 << 8) | u, 2)),
         Ok(2) => r
             .read::<u32>(5 + 16)
             .map_err(MatroskaError::Io)
-            .map(|u| ((0b00100000 << 16) | u, 3)),
+            .map(|u| ((0b0010_0000 << 16) | u, 3)),
         Ok(3) => r
             .read::<u32>(4 + 24)
             .map_err(MatroskaError::Io)
-            .map(|u| ((0b00010000 << 24) | u, 4)),
+            .map(|u| ((0b0001_0000 << 24) | u, 4)),
         Ok(_) => Err(MatroskaError::InvalidID),
         Err(err) => Err(MatroskaError::Io(err)),
     }
@@ -178,14 +182,8 @@ fn read_element_id(r: &mut BitReader) -> MResult<(u32, u64)> {
 
 fn read_element_size(r: &mut BitReader) -> MResult<(u64, u64)> {
     match r.read_unary1() {
-        Ok(0) => r
-            .read(7 + (0 * 8))
-            .map(|s| (s, 1))
-            .map_err(MatroskaError::Io),
-        Ok(1) => r
-            .read(6 + (1 * 8))
-            .map(|s| (s, 2))
-            .map_err(MatroskaError::Io),
+        Ok(0) => r.read(7).map(|s| (s, 1)).map_err(MatroskaError::Io),
+        Ok(1) => r.read(6 + 8).map(|s| (s, 2)).map_err(MatroskaError::Io),
         Ok(2) => r
             .read(5 + (2 * 8))
             .map(|s| (s, 3))
@@ -206,10 +204,7 @@ fn read_element_size(r: &mut BitReader) -> MResult<(u64, u64)> {
             .read(1 + (6 * 8))
             .map(|s| (s, 7))
             .map_err(MatroskaError::Io),
-        Ok(7) => r
-            .read(0 + (7 * 8))
-            .map(|s| (s, 8))
-            .map_err(MatroskaError::Io),
+        Ok(7) => r.read(7 * 8).map(|s| (s, 8)).map_err(MatroskaError::Io),
         Ok(_) => Err(MatroskaError::InvalidSize),
         Err(err) => Err(MatroskaError::Io(err)),
     }
@@ -234,18 +229,16 @@ pub fn read_uint(r: &mut io::Read, size: u64) -> MResult<u64> {
 }
 
 pub fn read_float(r: &mut io::Read, size: u64) -> MResult<f64> {
-    use std::mem;
-
     let mut r = BitReader::new(r);
     match size {
         4 => {
             let i: u32 = r.read(32).map_err(MatroskaError::Io)?;
-            let f: f32 = unsafe { mem::transmute(i) };
-            Ok(f as f64)
+            let f = f32::from_bits(i);
+            Ok(f64::from(f))
         }
         8 => {
             let i: u64 = r.read(64).map_err(MatroskaError::Io)?;
-            let f: f64 = unsafe { mem::transmute(i) };
+            let f = f64::from_bits(i);
             Ok(f)
         }
         _ => Err(MatroskaError::InvalidFloat),
