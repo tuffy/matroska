@@ -1,4 +1,4 @@
-// Copyright 2017-2018 Brian Langenberger
+// Copyright 2017-2020 Brian Langenberger
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -12,10 +12,11 @@ use std::{error, fmt, io};
 use bitstream_io;
 use chrono::offset::Utc;
 use chrono::DateTime;
+use phf::{phf_set, Set};
 
 pub type MResult<T> = Result<T, MatroskaError>;
 
-type BitReader<'a> = bitstream_io::BitReader<&'a mut io::Read, bitstream_io::BigEndian>;
+type BitReader<'a> = bitstream_io::BitReader<&'a mut dyn io::Read, bitstream_io::BigEndian>;
 
 /// An EBML tree element
 #[derive(Debug)]
@@ -25,8 +26,77 @@ pub struct Element {
     pub val: ElementType,
 }
 
+static IDS_MASTER: Set<u32> = phf_set! {
+    0x80u32, 0x8Eu32, 0x8Fu32, 0xA0u32, 0xA6u32, 0xAEu32, 0xB6u32,
+    0xB7u32, 0xBBu32, 0xC8u32, 0xDBu32, 0xE0u32, 0xE1u32, 0xE2u32,
+    0xE3u32, 0xE4u32, 0xE8u32, 0xE9u32, 0x45B9u32, 0x4DBBu32,
+    0x5034u32, 0x5035u32, 0x55B0u32, 0x55D0u32, 0x5854u32, 0x61A7u32,
+    0x6240u32, 0x63C0u32, 0x6624u32, 0x67C8u32, 0x6911u32, 0x6924u32,
+    0x6944u32, 0x6D80u32, 0x7373u32, 0x75A1u32, 0x7E5Bu32, 0x7E7Bu32,
+    0x1043_A770u32, 0x114D_9B74u32, 0x1254_C367u32, 0x1549_A966u32,
+    0x1654_AE6Bu32, 0x1853_8067u32, 0x1941_A469u32, 0x1A45_DFA3u32,
+    0x1B53_8667u32, 0x1C53_BB6Bu32, 0x1F43_B675u32
+};
+
+static IDS_INT: Set<u32> = phf_set! {
+    0xFBu32, 0xFDu32, 0x537Fu32, 0x75A2u32
+};
+
+static IDS_UINT: Set<u32> = phf_set! {
+    0x9Fu32, 0xA7u32, 0xAAu32, 0xABu32, 0xB0u32, 0xB2u32,
+    0xB3u32, 0xB9u32, 0xBAu32, 0xC0u32, 0xC6u32, 0xC7u32,
+    0xC9u32, 0xCAu32, 0xCBu32, 0xCCu32, 0xCDu32, 0xCEu32,
+    0xCFu32, 0xD7u32, 0xE5u32, 0xE6u32, 0xE7u32, 0xEAu32,
+    0xEBu32, 0xEDu32, 0xEEu32, 0xF0u32, 0xF1u32, 0xF7u32,
+    0xFAu32, 0x4254u32, 0x4285u32, 0x4286u32, 0x4287u32,
+    0x42F2u32, 0x42F3u32, 0x42F7u32, 0x4484u32, 0x4598u32,
+    0x45BCu32, 0x45BDu32, 0x45DBu32, 0x45DDu32, 0x4661u32,
+    0x4662u32, 0x46AEu32, 0x47E1u32, 0x47E5u32, 0x47E6u32,
+    0x5031u32, 0x5032u32, 0x5033u32, 0x535Fu32, 0x5378u32,
+    0x53ACu32, 0x53B8u32, 0x53B9u32, 0x53C0u32, 0x54AAu32,
+    0x54B0u32, 0x54B2u32, 0x54B3u32, 0x54BAu32, 0x54BBu32,
+    0x54CCu32, 0x54DDu32, 0x55AAu32, 0x55B1u32, 0x55B2u32,
+    0x55B3u32, 0x55B4u32, 0x55B5u32, 0x55B6u32, 0x55B7u32,
+    0x55B8u32, 0x55B9u32, 0x55BAu32, 0x55BBu32, 0x55BCu32,
+    0x55BDu32, 0x55EEu32, 0x56AAu32, 0x56BBu32, 0x58D7u32,
+    0x6264u32, 0x63C3u32, 0x63C4u32, 0x63C5u32, 0x63C6u32,
+    0x63C9u32, 0x66BFu32, 0x66FCu32, 0x68CAu32, 0x6922u32,
+    0x6955u32, 0x69BFu32, 0x69FCu32, 0x6DE7u32, 0x6DF8u32,
+    0x6EBCu32, 0x6FABu32, 0x73C4u32, 0x73C5u32, 0x7446u32,
+    0x7E8Au32, 0x7E9Au32, 0x23_4E7Au32, 0x23_E383u32, 0x2A_D7B1u32
+};
+
+static IDS_STRING: Set<u32> = phf_set! {
+    0x86u32, 0x4282u32, 0x437Cu32, 0x437Eu32, 0x447Au32,
+    0x4660u32, 0x63CAu32, 0x22_B59Cu32, 0x26_B240u32,
+    0x3B_4040u32
+};
+
+static IDS_UTF8: Set<u32> = phf_set! {
+    0x85u32, 0x4487u32, 0x45A3u32, 0x466Eu32, 0x467Eu32,
+    0x4D80u32, 0x536Eu32, 0x5654u32, 0x5741u32, 0x7384u32,
+    0x7BA9u32, 0x25_8688u32, 0x3A_9697u32, 0x3C_83ABu32, 0x3E_83BBu32
+};
+
+static IDS_BINARY: Set<u32> = phf_set! {
+    0xA1u32, 0xA2u32, 0xA3u32, 0xA4u32, 0xA5u32, 0xAFu32,
+    0xBFu32, 0xC1u32, 0xC4u32, 0xECu32, 0x4255u32, 0x4444u32,
+    0x4485u32, 0x450Du32, 0x465Cu32, 0x4675u32, 0x47E2u32,
+    0x47E3u32, 0x47E4u32, 0x53ABu32, 0x63A2u32, 0x6532u32,
+    0x66A5u32, 0x6933u32, 0x69A5u32, 0x6E67u32, 0x73A4u32,
+    0x7D7Bu32, 0x7EA5u32, 0x7EB5u32, 0x2E_B524u32, 0x3C_B923u32,
+    0x3E_B923u32
+};
+
+static IDS_FLOAT: Set<u32> = phf_set! {
+    0xB5u32, 0x4489u32, 0x55D1u32, 0x55D2u32, 0x55D3u32,
+    0x55D4u32, 0x55D5u32, 0x55D6u32, 0x55D7u32, 0x55D8u32,
+    0x55D9u32, 0x55DAu32, 0x78B5u32, 0x23_314Fu32, 0x23_83E3u32,
+    0x2F_B523u32
+};
+
 impl Element {
-    pub fn parse(r: &mut io::Read) -> MResult<Element> {
+    pub fn parse(r: &mut dyn io::Read) -> MResult<Element> {
         let (id, size, header_len) = read_element_id_size(r)?;
         let val = Element::parse_body(r, id, size)?;
         Ok(Element {
@@ -36,54 +106,23 @@ impl Element {
         })
     }
 
-    pub fn parse_body(r: &mut io::Read, id: u32, size: u64) -> MResult<ElementType> {
+    pub fn parse_body(r: &mut dyn io::Read, id: u32, size: u64) -> MResult<ElementType> {
         match id {
-            0x80 | 0x8E | 0x8F | 0xA0 | 0xA6 | 0xAE | 0xB6 | 0xB7 | 0xBB | 0xC8 | 0xDB | 0xE0
-            | 0xE1 | 0xE2 | 0xE3 | 0xE4 | 0xE8 | 0xE9 | 0x45B9 | 0x4DBB | 0x5034 | 0x5035
-            | 0x55B0 | 0x55D0 | 0x5854 | 0x61A7 | 0x6240 | 0x63C0 | 0x6624 | 0x67C8 | 0x6911
-            | 0x6924 | 0x6944 | 0x6D80 | 0x7373 | 0x75A1 | 0x7E5B | 0x7E7B | 0x1043_A770
-            | 0x114D_9B74 | 0x1254_C367 | 0x1549_A966 | 0x1654_AE6B | 0x1853_8067 | 0x1941_A469
-            | 0x1A45_DFA3 | 0x1B53_8667 | 0x1C53_BB6B | 0x1F43_B675 => {
+            id if IDS_MASTER.contains(&id) => {
                 Element::parse_master(r, size).map(ElementType::Master)
             }
-            0xFB | 0xFD | 0x537F | 0x75A2 => read_int(r, size).map(ElementType::Int),
-            0x83 | 0x88 | 0x89 | 0x91 | 0x92 | 0x96 | 0x97 | 0x98 | 0x9A | 0x9B | 0x9C | 0x9D
-            | 0x9F | 0xA7 | 0xAA | 0xAB | 0xB0 | 0xB2 | 0xB3 | 0xB9 | 0xBA | 0xC0 | 0xC6 | 0xC7
-            | 0xC9 | 0xCA | 0xCB | 0xCC | 0xCD | 0xCE | 0xCF | 0xD7 | 0xE5 | 0xE6 | 0xE7 | 0xEA
-            | 0xEB | 0xED | 0xEE | 0xF0 | 0xF1 | 0xF7 | 0xFA | 0x4254 | 0x4285 | 0x4286
-            | 0x4287 | 0x42F2 | 0x42F3 | 0x42F7 | 0x4484 | 0x4598 | 0x45BC | 0x45BD | 0x45DB
-            | 0x45DD | 0x4661 | 0x4662 | 0x46AE | 0x47E1 | 0x47E5 | 0x47E6 | 0x5031 | 0x5032
-            | 0x5033 | 0x535F | 0x5378 | 0x53AC | 0x53B8 | 0x53B9 | 0x53C0 | 0x54AA | 0x54B0
-            | 0x54B2 | 0x54B3 | 0x54BA | 0x54BB | 0x54CC | 0x54DD | 0x55AA | 0x55B1 | 0x55B2
-            | 0x55B3 | 0x55B4 | 0x55B5 | 0x55B6 | 0x55B7 | 0x55B8 | 0x55B9 | 0x55BA | 0x55BB
-            | 0x55BC | 0x55BD | 0x55EE | 0x56AA | 0x56BB | 0x58D7 | 0x6264 | 0x63C3 | 0x63C4
-            | 0x63C5 | 0x63C6 | 0x63C9 | 0x66BF | 0x66FC | 0x68CA | 0x6922 | 0x6955 | 0x69BF
-            | 0x69FC | 0x6DE7 | 0x6DF8 | 0x6EBC | 0x6FAB | 0x73C4 | 0x73C5 | 0x7446 | 0x7E8A
-            | 0x7E9A | 0x23_4E7A | 0x23_E383 | 0x2A_D7B1 => {
-                read_uint(r, size).map(ElementType::UInt)
-            }
-            0x86 | 0x4282 | 0x437C | 0x437E | 0x447A | 0x4660 | 0x63CA | 0x22_B59C | 0x26_B240
-            | 0x3B_4040 => read_string(r, size).map(ElementType::String),
-            0x85 | 0x4487 | 0x45A3 | 0x466E | 0x467E | 0x4D80 | 0x536E | 0x5654 | 0x5741
-            | 0x7384 | 0x7BA9 | 0x25_8688 | 0x3A_9697 | 0x3C_83AB | 0x3E_83BB => {
-                read_utf8(r, size).map(ElementType::UTF8)
-            }
-            0xA1 | 0xA2 | 0xA3 | 0xA4 | 0xA5 | 0xAF | 0xBF | 0xC1 | 0xC4 | 0xEC | 0x4255
-            | 0x4444 | 0x4485 | 0x450D | 0x465C | 0x4675 | 0x47E2 | 0x47E3 | 0x47E4 | 0x53AB
-            | 0x63A2 | 0x6532 | 0x66A5 | 0x6933 | 0x69A5 | 0x6E67 | 0x73A4 | 0x7D7B | 0x7EA5
-            | 0x7EB5 | 0x2E_B524 | 0x3C_B923 | 0x3E_B923 => {
-                read_bin(r, size).map(ElementType::Binary)
-            }
-            0xB5 | 0x4489 | 0x55D1 | 0x55D2 | 0x55D3 | 0x55D4 | 0x55D5 | 0x55D6 | 0x55D7
-            | 0x55D8 | 0x55D9 | 0x55DA | 0x78B5 | 0x23_314F | 0x23_83E3 | 0x2F_B523 => {
-                read_float(r, size).map(ElementType::Float)
-            }
+            id if IDS_INT.contains(&id) => read_int(r, size).map(ElementType::Int),
+            id if IDS_UINT.contains(&id) => read_uint(r, size).map(ElementType::UInt),
+            id if IDS_STRING.contains(&id) => read_string(r, size).map(ElementType::String),
+            id if IDS_UTF8.contains(&id) => read_utf8(r, size).map(ElementType::UTF8),
+            id if IDS_BINARY.contains(&id) => read_bin(r, size).map(ElementType::Binary),
+            id if IDS_FLOAT.contains(&id) => read_float(r, size).map(ElementType::Float),
             0x4461 => read_date(r, size).map(ElementType::Date),
             _ => read_bin(r, size).map(ElementType::Binary),
         }
     }
 
-    pub fn parse_master(r: &mut io::Read, mut size: u64) -> MResult<Vec<Element>> {
+    pub fn parse_master(r: &mut dyn io::Read, mut size: u64) -> MResult<Vec<Element>> {
         let mut elements = Vec::new();
         while size > 0 {
             let e = Element::parse(r)?;
@@ -141,7 +180,7 @@ impl fmt::Display for MatroskaError {
 }
 
 impl error::Error for MatroskaError {
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn error::Error> {
         match self {
             MatroskaError::Io(error) => Some(error),
             MatroskaError::UTF8(error) => Some(error),
@@ -150,7 +189,7 @@ impl error::Error for MatroskaError {
     }
 }
 
-pub fn read_element_id_size(reader: &mut io::Read) -> MResult<(u32, u64, u64)> {
+pub fn read_element_id_size(reader: &mut dyn io::Read) -> MResult<(u32, u64, u64)> {
     let mut r = BitReader::new(reader);
     let (id, id_len) = read_element_id(&mut r)?;
     let (size, size_len) = read_element_size(&mut r)?;
@@ -210,25 +249,25 @@ fn read_element_size(r: &mut BitReader) -> MResult<(u64, u64)> {
     }
 }
 
-pub fn read_int(r: &mut io::Read, size: u64) -> MResult<i64> {
+pub fn read_int(r: &mut dyn io::Read, size: u64) -> MResult<i64> {
     let mut r = BitReader::new(r);
     match size {
         0 => Ok(0),
-        s @ 1...8 => r.read_signed(s as u32 * 8).map_err(MatroskaError::Io),
+        s @ 1..=8 => r.read_signed(s as u32 * 8).map_err(MatroskaError::Io),
         _ => Err(MatroskaError::InvalidUint),
     }
 }
 
-pub fn read_uint(r: &mut io::Read, size: u64) -> MResult<u64> {
+pub fn read_uint(r: &mut dyn io::Read, size: u64) -> MResult<u64> {
     let mut r = BitReader::new(r);
     match size {
         0 => Ok(0),
-        s @ 1...8 => r.read(s as u32 * 8).map_err(MatroskaError::Io),
+        s @ 1..=8 => r.read(s as u32 * 8).map_err(MatroskaError::Io),
         _ => Err(MatroskaError::InvalidUint),
     }
 }
 
-pub fn read_float(r: &mut io::Read, size: u64) -> MResult<f64> {
+pub fn read_float(r: &mut dyn io::Read, size: u64) -> MResult<f64> {
     let mut r = BitReader::new(r);
     match size {
         4 => {
@@ -245,16 +284,16 @@ pub fn read_float(r: &mut io::Read, size: u64) -> MResult<f64> {
     }
 }
 
-pub fn read_string(r: &mut io::Read, size: u64) -> MResult<String> {
+pub fn read_string(r: &mut dyn io::Read, size: u64) -> MResult<String> {
     /*FIXME - limit this to ASCII set*/
     read_bin(r, size).and_then(|bytes| String::from_utf8(bytes).map_err(MatroskaError::UTF8))
 }
 
-pub fn read_utf8(r: &mut io::Read, size: u64) -> MResult<String> {
+pub fn read_utf8(r: &mut dyn io::Read, size: u64) -> MResult<String> {
     read_bin(r, size).and_then(|bytes| String::from_utf8(bytes).map_err(MatroskaError::UTF8))
 }
 
-pub fn read_date(r: &mut io::Read, size: u64) -> MResult<DateTime<Utc>> {
+pub fn read_date(r: &mut dyn io::Read, size: u64) -> MResult<DateTime<Utc>> {
     if size == 8 {
         use chrono::Duration;
         use chrono::TimeZone;
@@ -265,10 +304,8 @@ pub fn read_date(r: &mut io::Read, size: u64) -> MResult<DateTime<Utc>> {
     }
 }
 
-pub fn read_bin(r: &mut io::Read, size: u64) -> MResult<Vec<u8>> {
-    /*FIXME - need to read this in chunks*/
-    let mut buf = Vec::with_capacity(size as usize);
-    buf.resize(size as usize, 0);
+pub fn read_bin(r: &mut dyn io::Read, size: u64) -> MResult<Vec<u8>> {
+    let mut buf = vec![0; size as usize];
     r.read_exact(&mut buf)
         .map(|()| buf)
         .map_err(MatroskaError::Io)

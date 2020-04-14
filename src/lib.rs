@@ -1,4 +1,4 @@
-// Copyright 2017-2018 Brian Langenberger
+// Copyright 2017-2020 Brian Langenberger
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -29,9 +29,6 @@ use std::collections::BTreeMap;
 use std::fs::File;
 use std::io;
 use std::time::Duration;
-
-extern crate bitstream_io;
-extern crate chrono;
 
 mod ebml;
 mod ids;
@@ -188,7 +185,7 @@ impl Seektable {
         self.seek.get(&id).cloned()
     }
 
-    fn parse(r: &mut io::Read, size: u64) -> MResult<Seektable> {
+    fn parse(r: &mut dyn io::Read, size: u64) -> MResult<Seektable> {
         let mut seektable = Seektable::new();
         for e in Element::parse_master(r, size)? {
             if let Element {
@@ -274,7 +271,7 @@ impl Info {
         }
     }
 
-    fn parse(r: &mut io::Read, size: u64) -> MResult<Info> {
+    fn parse(r: &mut dyn io::Read, size: u64) -> MResult<Info> {
         let mut info = Info::new();
         let mut timecode_scale = None;
         let mut duration = None;
@@ -383,7 +380,7 @@ impl Track {
         }
     }
 
-    fn parse(r: &mut io::Read, size: u64) -> MResult<Vec<Track>> {
+    fn parse(r: &mut dyn io::Read, size: u64) -> MResult<Vec<Track>> {
         Element::parse_master(r, size).map(|elements| {
             elements
                 .into_iter()
@@ -394,7 +391,8 @@ impl Track {
                         ..
                     } => Some(Track::build_entry(sub_elements)),
                     _ => None,
-                }).collect()
+                })
+                .collect()
         })
     }
 
@@ -689,7 +687,7 @@ impl Attachment {
         }
     }
 
-    fn parse(r: &mut io::Read, size: u64) -> MResult<Vec<Attachment>> {
+    fn parse(r: &mut dyn io::Read, size: u64) -> MResult<Vec<Attachment>> {
         Element::parse_master(r, size).map(|elements| {
             elements
                 .into_iter()
@@ -700,7 +698,8 @@ impl Attachment {
                         ..
                     } => Some(Attachment::build_entry(sub_elements)),
                     _ => None,
-                }).collect()
+                })
+                .collect()
         })
     }
 
@@ -766,7 +765,7 @@ impl ChapterEdition {
         }
     }
 
-    fn parse(r: &mut io::Read, size: u64) -> MResult<Vec<ChapterEdition>> {
+    fn parse(r: &mut dyn io::Read, size: u64) -> MResult<Vec<ChapterEdition>> {
         Element::parse_master(r, size).map(|elements| {
             elements
                 .into_iter()
@@ -777,7 +776,8 @@ impl ChapterEdition {
                         ..
                     } => Some(ChapterEdition::build_entry(sub_elements)),
                     _ => None,
-                }).collect()
+                })
+                .collect()
         })
     }
 
