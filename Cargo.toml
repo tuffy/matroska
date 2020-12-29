@@ -2,7 +2,7 @@
 name = "matroska"
 description = "Library for parsing Matroska (MKV) file metadata."
 keywords = ["matroska", "mkv"]
-version = "0.5.4"
+version = "0.5.5"
 authors = ["Brian Langenberger <bjl@usa.net>"]
 license = "MIT/Apache-2.0"
 documentation = "https://docs.rs/matroska/"
@@ -11,6 +11,6 @@ repository = "https://github.com/tuffy/matroska"
 edition = "2018"
 
 [dependencies]
-bitstream-io = "0.8"
+bitstream-io = "1.0"
 chrono = "0.4"
 phf = { version = "0.8", features = ["macros"] }

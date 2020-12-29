@@ -9,7 +9,7 @@
 use std::string::FromUtf8Error;
 use std::{error, fmt, io};
 
-use bitstream_io;
+use bitstream_io::BitRead;
 use chrono::offset::Utc;
 use chrono::DateTime;
 use phf::{phf_set, Set};
@@ -198,7 +198,7 @@ pub fn read_element_id_size(reader: &mut dyn io::Read) -> MResult<(u32, u64, u64
     Ok((id, size, id_len + size_len))
 }
 
-fn read_element_id(r: &mut BitReader) -> MResult<(u32, u64)> {
+fn read_element_id<R: BitRead>(r: &mut R) -> MResult<(u32, u64)> {
     match r.read_unary1() {
         Ok(0) => r
             .read::<u32>(7)
@@ -221,7 +221,7 @@ fn read_element_id(r: &mut BitReader) -> MResult<(u32, u64)> {
     }
 }
 
-fn read_element_size(r: &mut BitReader) -> MResult<(u64, u64)> {
+fn read_element_size<R: BitRead>(r: &mut R) -> MResult<(u64, u64)> {
     match r.read_unary1() {
         Ok(0) => r.read(7).map(|s| (s, 1)).map_err(MatroskaError::Io),
         Ok(1) => r.read(6 + 8).map(|s| (s, 2)).map_err(MatroskaError::Io),
