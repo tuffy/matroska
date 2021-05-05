@@ -50,6 +50,8 @@ pub struct Matroska {
     pub attachments: Vec<Attachment>,
     /// The file's Chapters segment
     pub chapters: Vec<ChapterEdition>,
+    /// The file's Tags segment
+    pub tags: Vec<Tag>,
 }
 
 impl Matroska {
@@ -59,6 +61,7 @@ impl Matroska {
             tracks: Vec::new(),
             attachments: Vec::new(),
             chapters: Vec::new(),
+            tags: Vec::new(),
         }
     }
 
@@ -115,6 +118,13 @@ impl Matroska {
                         assert_eq!(i, ids::CHAPTERS);
                         matroska.chapters = ChapterEdition::parse(&mut file, s)?;
                     }
+                    if let Some(pos) = seektable.get(ids::TAGS) {
+                        file.seek(SeekFrom::Start(pos + segment_start))
+                            .map_err(MatroskaError::Io)?;
+                        let (i, s, _) = ebml::read_element_id_size(&mut file)?;
+                        assert_eq!(i, ids::TAGS);
+                        matroska.tags = Tag::parse(&mut file, s)?;
+                    }
                     return Ok(matroska);
                 }
                 // if no seektable, populate file from parts
@@ -129,6 +139,9 @@ impl Matroska {
                 }
                 ids::CHAPTERS => {
                     matroska.chapters = ChapterEdition::parse(&mut file, size_1)?;
+                }
+                ids::TAGS => {
+                    matroska.tags = Tag::parse(&mut file, size_1)?;
                 }
                 _ => {
                     file.seek(SeekFrom::Current(size_1 as i64))
@@ -352,7 +365,7 @@ pub struct Track {
     /// A human-readable track name
     pub name: Option<String>,
     /// The track's language
-    pub language: Option<String>,
+    pub language: Option<Language>,
     /// The track's codec's ID
     pub codec_id: String,
     /// The track's codec's human-readable name
@@ -468,7 +481,14 @@ impl Track {
                     val: ElementType::String(language),
                     ..
                 } => {
-                    track.language = Some(language);
+                    track.language = Some(Language::ISO639(language));
+                }
+                Element {
+                    id: ids::LANGUAGE_IETF,
+                    val: ElementType::String(language),
+                    ..
+                } => {
+                    track.language = Some(Language::IETF(language));
                 }
                 Element {
                     id: ids::CODEC_ID,
@@ -898,14 +918,14 @@ pub struct ChapterDisplay {
     /// The user interface string
     pub string: String,
     /// The string's language
-    pub language: String,
+    pub language: Language,
 }
 
 impl ChapterDisplay {
     fn new() -> ChapterDisplay {
         ChapterDisplay {
             string: String::new(),
-            language: String::new(),
+            language: Language::ISO639(String::new()),
         }
     }
 
@@ -925,11 +945,252 @@ impl ChapterDisplay {
                     val: ElementType::String(language),
                     ..
                 } => {
-                    display.language = language;
+                    display.language = Language::ISO639(language);
+                }
+                Element {
+                    id: ids::CHAPLANGUAGE_IETF,
+                    val: ElementType::String(language),
+                    ..
+                } => {
+                    display.language = Language::IETF(language);
                 }
                 _ => {}
             }
         }
         display
     }
+}
+
+/// An attached tag
+#[derive(Debug)]
+pub struct Tag {
+    /// which elements the metadata's tag applies to
+    pub targets: Option<Target>,
+    /// general information about the target
+    pub simple: Vec<SimpleTag>,
+}
+
+impl Tag {
+    fn new() -> Tag {
+        Tag {
+            targets: None,
+            simple: Vec::new(),
+        }
+    }
+
+    fn parse(r: &mut dyn io::Read, size: u64) -> MResult<Vec<Tag>> {
+        Element::parse_master(r, size).map(|elements| {
+            elements
+                .into_iter()
+                .filter_map(|e| match e {
+                    Element {
+                        id: ids::TAG,
+                        val: ElementType::Master(sub_elements),
+                        ..
+                    } => Some(Tag::build_entry(sub_elements)),
+                    _ => None,
+                })
+                .collect()
+        })
+    }
+
+    fn build_entry(elements: Vec<Element>) -> Tag {
+        let mut tag = Tag::new();
+        for e in elements {
+            match e {
+                Element {
+                    id: ids::TARGETS,
+                    val: ElementType::Master(sub_elements),
+                    ..
+                } => {
+                    tag.targets = Some(Target::build_entry(sub_elements));
+                }
+                Element {
+                    id: ids::SIMPLETAG,
+                    val: ElementType::Master(sub_elements),
+                    ..
+                } => {
+                    tag.simple.push(SimpleTag::build_entry(sub_elements));
+                }
+                _ => {}
+            }
+        }
+        tag
+    }
+}
+
+/// Which elements the metadata's tag applies to
+#[derive(Debug)]
+pub struct Target {
+    /// Logical level of target
+    pub target_type_value: Option<u64>,
+    /// Informational string of target level
+    pub target_type: Option<String>,
+    /// Unique IDs of track(s) the tag belongs to
+    pub track_uids: Vec<u64>,
+    /// Unique IDs of edition entry(s) the tag belongs to
+    pub edition_uids: Vec<u64>,
+    /// Unique IDs of chapter(s) the tag belongs to
+    pub chapter_uids: Vec<u64>,
+    /// Unique IDs of attachment(s) the tag belongs to
+    pub attachment_uids: Vec<u64>,
+}
+
+impl Target {
+    fn new() -> Target {
+        Target {
+            target_type_value: None,
+            target_type: None,
+            track_uids: Vec::new(),
+            edition_uids: Vec::new(),
+            chapter_uids: Vec::new(),
+            attachment_uids: Vec::new(),
+        }
+    }
+
+    fn build_entry(elements: Vec<Element>) -> Target {
+        let mut target = Target::new();
+        for e in elements {
+            match e {
+                Element {
+                    id: ids::TARGETTYPEVALUE,
+                    val: ElementType::UInt(number),
+                    ..
+                } => {
+                    target.target_type_value = Some(number);
+                }
+                Element {
+                    id: ids::TARGETTYPE,
+                    val: ElementType::String(string),
+                    ..
+                } => {
+                    target.target_type = Some(string);
+                }
+                Element {
+                    id: ids::TAG_TRACK_UID,
+                    val: ElementType::UInt(number),
+                    ..
+                } => {
+                    target.track_uids.push(number);
+                }
+                Element {
+                    id: ids::TAG_EDITION_UID,
+                    val: ElementType::UInt(number),
+                    ..
+                } => {
+                    target.edition_uids.push(number);
+                }
+                Element {
+                    id: ids::TAG_CHAPTER_UID,
+                    val: ElementType::UInt(number),
+                    ..
+                } => {
+                    target.chapter_uids.push(number);
+                }
+                Element {
+                    id: ids::TAG_ATTACHMENT_UID,
+                    val: ElementType::UInt(number),
+                    ..
+                } => {
+                    target.attachment_uids.push(number);
+                }
+                _ => {}
+            }
+        }
+        target
+    }
+}
+
+/// General information about the target
+#[derive(Debug)]
+pub struct SimpleTag {
+    /// The tag's name
+    pub name: String,
+    /// The tag's language
+    pub language: Option<Language>,
+    /// Whether this is the default/original language to use
+    pub default: bool,
+    /// The tag's value
+    pub value: Option<TagValue>,
+}
+
+impl SimpleTag {
+    fn new() -> SimpleTag {
+        SimpleTag {
+            name: String::new(),
+            language: None,
+            default: false,
+            value: None,
+        }
+    }
+
+    fn build_entry(elements: Vec<Element>) -> SimpleTag {
+        let mut tag = SimpleTag::new();
+        for e in elements {
+            match e {
+                Element {
+                    id: ids::TAGNAME,
+                    val: ElementType::UTF8(string),
+                    ..
+                } => {
+                    tag.name = string;
+                }
+                Element {
+                    id: ids::TAGLANGUAGE,
+                    val: ElementType::String(string),
+                    ..
+                } => {
+                    tag.language = Some(Language::ISO639(string));
+                }
+                Element {
+                    id: ids::TAGLANGUAGE_IETF,
+                    val: ElementType::String(string),
+                    ..
+                } => {
+                    tag.language = Some(Language::IETF(string));
+                }
+                Element {
+                    id: ids::TAGDEFAULT,
+                    val: ElementType::UInt(default),
+                    ..
+                } => {
+                    tag.default = default != 0;
+                }
+                Element {
+                    id: ids::TAGSTRING,
+                    val: ElementType::UTF8(string),
+                    ..
+                } => {
+                    tag.value = Some(TagValue::String(string));
+                }
+                Element {
+                    id: ids::TAGBINARY,
+                    val: ElementType::Binary(binary),
+                    ..
+                } => {
+                    tag.value = Some(TagValue::Binary(binary));
+                }
+                _ => {}
+            }
+        }
+        tag
+    }
+}
+
+/// Which form of language is in use
+#[derive(Debug)]
+pub enum Language {
+    /// Language formatted as ISO-639
+    ISO639(String),
+    /// Lanuage formatted as IETF
+    IETF(String),
+}
+
+/// A tag's value
+#[derive(Debug)]
+pub enum TagValue {
+    /// Tag's value as string
+    String(String),
+    /// Tag's value as binary
+    Binary(Vec<u8>),
 }
