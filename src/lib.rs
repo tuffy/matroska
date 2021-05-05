@@ -481,7 +481,9 @@ impl Track {
                     val: ElementType::String(language),
                     ..
                 } => {
-                    track.language = Some(Language::ISO639(language));
+                    if !matches!(track.language, Some(Language::IETF(_))) {
+                        track.language = Some(Language::ISO639(language));
+                    }
                 }
                 Element {
                     id: ids::LANGUAGE_IETF,
@@ -945,7 +947,9 @@ impl ChapterDisplay {
                     val: ElementType::String(language),
                     ..
                 } => {
-                    display.language = Language::ISO639(language);
+                    if !matches!(display.language, Language::IETF(_)) {
+                        display.language = Language::ISO639(language);
+                    }
                 }
                 Element {
                     id: ids::CHAPLANGUAGE_IETF,
@@ -1199,7 +1203,9 @@ impl SimpleTag {
                     val: ElementType::String(string),
                     ..
                 } => {
-                    tag.language = Some(Language::ISO639(string));
+                    if !matches!(tag.language, Some(Language::IETF(_))) {
+                        tag.language = Some(Language::ISO639(string));
+                    }
                 }
                 Element {
                     id: ids::TAGLANGUAGE_IETF,
