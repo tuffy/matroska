@@ -37,7 +37,7 @@ use chrono::offset::Utc;
 use chrono::DateTime;
 
 pub use ebml::MatroskaError;
-use ebml::{Element, ElementType, MResult};
+use ebml::{Element, ElementType, Result};
 
 /// A Matroska file
 #[derive(Debug)]
@@ -66,7 +66,7 @@ impl Matroska {
     }
 
     /// Parses contents of open Matroska file
-    pub fn open(mut file: File) -> MResult<Matroska> {
+    pub fn open(mut file: File) -> Result<Matroska> {
         use std::io::Seek;
         use std::io::SeekFrom;
 
@@ -198,7 +198,7 @@ impl Seektable {
         self.seek.get(&id).cloned()
     }
 
-    fn parse(r: &mut dyn io::Read, size: u64) -> MResult<Seektable> {
+    fn parse(r: &mut dyn io::Read, size: u64) -> Result<Seektable> {
         let mut seektable = Seektable::new();
         for e in Element::parse_master(r, size)? {
             if let Element {
@@ -284,7 +284,7 @@ impl Info {
         }
     }
 
-    fn parse(r: &mut dyn io::Read, size: u64) -> MResult<Info> {
+    fn parse(r: &mut dyn io::Read, size: u64) -> Result<Info> {
         let mut info = Info::new();
         let mut timecode_scale = None;
         let mut duration = None;
@@ -393,7 +393,7 @@ impl Track {
         }
     }
 
-    fn parse(r: &mut dyn io::Read, size: u64) -> MResult<Vec<Track>> {
+    fn parse(r: &mut dyn io::Read, size: u64) -> Result<Vec<Track>> {
         Element::parse_master(r, size).map(|elements| {
             elements
                 .into_iter()
@@ -707,7 +707,7 @@ impl Attachment {
         }
     }
 
-    fn parse(r: &mut dyn io::Read, size: u64) -> MResult<Vec<Attachment>> {
+    fn parse(r: &mut dyn io::Read, size: u64) -> Result<Vec<Attachment>> {
         Element::parse_master(r, size).map(|elements| {
             elements
                 .into_iter()
@@ -785,7 +785,7 @@ impl ChapterEdition {
         }
     }
 
-    fn parse(r: &mut dyn io::Read, size: u64) -> MResult<Vec<ChapterEdition>> {
+    fn parse(r: &mut dyn io::Read, size: u64) -> Result<Vec<ChapterEdition>> {
         Element::parse_master(r, size).map(|elements| {
             elements
                 .into_iter()
@@ -978,7 +978,7 @@ impl Tag {
         }
     }
 
-    fn parse(r: &mut dyn io::Read, size: u64) -> MResult<Vec<Tag>> {
+    fn parse(r: &mut dyn io::Read, size: u64) -> Result<Vec<Tag>> {
         Element::parse_master(r, size).map(|elements| {
             elements
                 .into_iter()
@@ -1075,7 +1075,7 @@ impl TargetTypeValue {
 
 impl std::fmt::Display for TargetTypeValue {
     #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
         write!(f, "{}", self.as_str())
     }
 }

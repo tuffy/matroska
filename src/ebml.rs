@@ -14,7 +14,7 @@ use chrono::offset::Utc;
 use chrono::DateTime;
 use phf::{phf_set, Set};
 
-pub type MResult<T> = Result<T, MatroskaError>;
+pub type Result<T> = std::result::Result<T, MatroskaError>;
 
 type BitReader<'a> = bitstream_io::BitReader<&'a mut dyn io::Read, bitstream_io::BigEndian>;
 
@@ -98,7 +98,7 @@ static IDS_FLOAT: Set<u32> = phf_set! {
 };
 
 impl Element {
-    pub fn parse(r: &mut dyn io::Read) -> MResult<Element> {
+    pub fn parse(r: &mut dyn io::Read) -> Result<Element> {
         let (id, size, header_len) = read_element_id_size(r)?;
         let val = Element::parse_body(r, id, size)?;
         Ok(Element {
@@ -108,7 +108,7 @@ impl Element {
         })
     }
 
-    pub fn parse_body(r: &mut dyn io::Read, id: u32, size: u64) -> MResult<ElementType> {
+    pub fn parse_body(r: &mut dyn io::Read, id: u32, size: u64) -> Result<ElementType> {
         match id {
             id if IDS_MASTER.contains(&id) => {
                 Element::parse_master(r, size).map(ElementType::Master)
@@ -124,7 +124,7 @@ impl Element {
         }
     }
 
-    pub fn parse_master(r: &mut dyn io::Read, mut size: u64) -> MResult<Vec<Element>> {
+    pub fn parse_master(r: &mut dyn io::Read, mut size: u64) -> Result<Vec<Element>> {
         let mut elements = Vec::new();
         while size > 0 {
             let e = Element::parse(r)?;
@@ -168,7 +168,7 @@ pub enum MatroskaError {
 }
 
 impl fmt::Display for MatroskaError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> std::result::Result<(), fmt::Error> {
         match self {
             MatroskaError::Io(error) => error.fmt(f),
             MatroskaError::UTF8(error) => error.fmt(f),
@@ -191,14 +191,14 @@ impl error::Error for MatroskaError {
     }
 }
 
-pub fn read_element_id_size(reader: &mut dyn io::Read) -> MResult<(u32, u64, u64)> {
+pub fn read_element_id_size(reader: &mut dyn io::Read) -> Result<(u32, u64, u64)> {
     let mut r = BitReader::new(reader);
     let (id, id_len) = read_element_id(&mut r)?;
     let (size, size_len) = read_element_size(&mut r)?;
     Ok((id, size, id_len + size_len))
 }
 
-fn read_element_id<R: BitRead>(r: &mut R) -> MResult<(u32, u64)> {
+fn read_element_id<R: BitRead>(r: &mut R) -> Result<(u32, u64)> {
     match r.read_unary1() {
         Ok(0) => r
             .read::<u32>(7)
@@ -221,7 +221,7 @@ fn read_element_id<R: BitRead>(r: &mut R) -> MResult<(u32, u64)> {
     }
 }
 
-fn read_element_size<R: BitRead>(r: &mut R) -> MResult<(u64, u64)> {
+fn read_element_size<R: BitRead>(r: &mut R) -> Result<(u64, u64)> {
     match r.read_unary1() {
         Ok(0) => r.read(7).map(|s| (s, 1)).map_err(MatroskaError::Io),
         Ok(1) => r.read(6 + 8).map(|s| (s, 2)).map_err(MatroskaError::Io),
@@ -251,7 +251,7 @@ fn read_element_size<R: BitRead>(r: &mut R) -> MResult<(u64, u64)> {
     }
 }
 
-pub fn read_int(r: &mut dyn io::Read, size: u64) -> MResult<i64> {
+pub fn read_int(r: &mut dyn io::Read, size: u64) -> Result<i64> {
     let mut r = BitReader::new(r);
     match size {
         0 => Ok(0),
@@ -260,7 +260,7 @@ pub fn read_int(r: &mut dyn io::Read, size: u64) -> MResult<i64> {
     }
 }
 
-pub fn read_uint(r: &mut dyn io::Read, size: u64) -> MResult<u64> {
+pub fn read_uint(r: &mut dyn io::Read, size: u64) -> Result<u64> {
     let mut r = BitReader::new(r);
     match size {
         0 => Ok(0),
@@ -269,7 +269,7 @@ pub fn read_uint(r: &mut dyn io::Read, size: u64) -> MResult<u64> {
     }
 }
 
-pub fn read_float(r: &mut dyn io::Read, size: u64) -> MResult<f64> {
+pub fn read_float(r: &mut dyn io::Read, size: u64) -> Result<f64> {
     let mut r = BitReader::new(r);
     match size {
         4 => {
@@ -286,16 +286,16 @@ pub fn read_float(r: &mut dyn io::Read, size: u64) -> MResult<f64> {
     }
 }
 
-pub fn read_string(r: &mut dyn io::Read, size: u64) -> MResult<String> {
+pub fn read_string(r: &mut dyn io::Read, size: u64) -> Result<String> {
     /*FIXME - limit this to ASCII set*/
     read_bin(r, size).and_then(|bytes| String::from_utf8(bytes).map_err(MatroskaError::UTF8))
 }
 
-pub fn read_utf8(r: &mut dyn io::Read, size: u64) -> MResult<String> {
+pub fn read_utf8(r: &mut dyn io::Read, size: u64) -> Result<String> {
     read_bin(r, size).and_then(|bytes| String::from_utf8(bytes).map_err(MatroskaError::UTF8))
 }
 
-pub fn read_date(r: &mut dyn io::Read, size: u64) -> MResult<DateTime<Utc>> {
+pub fn read_date(r: &mut dyn io::Read, size: u64) -> Result<DateTime<Utc>> {
     if size == 8 {
         use chrono::Duration;
         use chrono::TimeZone;
@@ -306,7 +306,7 @@ pub fn read_date(r: &mut dyn io::Read, size: u64) -> MResult<DateTime<Utc>> {
     }
 }
 
-pub fn read_bin(r: &mut dyn io::Read, size: u64) -> MResult<Vec<u8>> {
+pub fn read_bin(r: &mut dyn io::Read, size: u64) -> Result<Vec<u8>> {
     let mut buf = vec![0; size as usize];
     r.read_exact(&mut buf)
         .map(|()| buf)
