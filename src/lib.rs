@@ -1023,7 +1023,7 @@ impl Tag {
 #[derive(Debug)]
 pub struct Target {
     /// Logical level of target
-    pub target_type_value: Option<u64>,
+    pub target_type_value: Option<TargetTypeValue>,
     /// Informational string of target level
     pub target_type: Option<String>,
     /// Unique IDs of track(s) the tag belongs to
@@ -1034,6 +1034,65 @@ pub struct Target {
     pub chapter_uids: Vec<u64>,
     /// Unique IDs of attachment(s) the tag belongs to
     pub attachment_uids: Vec<u64>,
+}
+
+/// The type of value the tag is for
+#[derive(Debug)]
+pub enum TargetTypeValue {
+    /// collection
+    Collection,
+    /// edition / issue / volume / opus / season / sequel
+    Season,
+    /// album / opera / concert / movie / episode / concert
+    Episode,
+    /// part / session
+    Part,
+    /// track / song / chapter
+    Chapter,
+    /// subtrack / part / movement / scene
+    Scene,
+    /// shot
+    Shot,
+    /// none of the define value types
+    Unknown,
+}
+
+impl TargetTypeValue {
+    /// Returns type value as static string
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TargetTypeValue::Collection => "collection",
+            TargetTypeValue::Season => "season",
+            TargetTypeValue::Episode => "episode",
+            TargetTypeValue::Part => "part",
+            TargetTypeValue::Chapter => "chapter",
+            TargetTypeValue::Scene => "scene",
+            TargetTypeValue::Shot => "shot",
+            TargetTypeValue::Unknown => "unknown",
+        }
+    }
+}
+
+impl std::fmt::Display for TargetTypeValue {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl From<u64> for TargetTypeValue {
+    fn from(val: u64) -> Self {
+        match val {
+            70 => TargetTypeValue::Collection,
+            60 => TargetTypeValue::Season,
+            50 => TargetTypeValue::Episode,
+            40 => TargetTypeValue::Part,
+            30 => TargetTypeValue::Chapter,
+            20 => TargetTypeValue::Scene,
+            10 => TargetTypeValue::Shot,
+            _ => TargetTypeValue::Unknown,
+        }
+    }
 }
 
 impl Target {
@@ -1057,7 +1116,7 @@ impl Target {
                     val: ElementType::UInt(number),
                     ..
                 } => {
-                    target.target_type_value = Some(number);
+                    target.target_type_value = Some(number.into());
                 }
                 Element {
                     id: ids::TARGETTYPE,
