@@ -261,6 +261,14 @@ impl Seek {
 /// An Info segment with information pertaining to the entire file
 #[derive(Debug)]
 pub struct Info {
+    /// The file's UID
+    pub uid: Option<Vec<u8>>,
+    /// Unique ID of the previous segment
+    pub prev_uid: Option<Vec<u8>>,
+    /// Unique ID of the next segment
+    pub next_uid: Option<Vec<u8>>,
+    /// Unique IDs of the families this segment belongs to
+    pub family_uids: Vec<Vec<u8>>,
     /// The file's title
     pub title: Option<String>,
     /// The file's duration
@@ -276,6 +284,10 @@ pub struct Info {
 impl Info {
     fn new() -> Info {
         Info {
+            uid: None,
+            prev_uid: None,
+            next_uid: None,
+            family_uids: Vec::new(),
             title: None,
             duration: None,
             date_utc: None,
@@ -291,6 +303,34 @@ impl Info {
 
         for e in Element::parse_master(r, size)? {
             match e {
+                Element {
+                    id: ids::SEGMENTUID,
+                    val: ElementType::Binary(uid),
+                    ..
+                } => {
+                    info.uid = Some(uid);
+                }
+                Element {
+                    id: ids::PREVUID,
+                    val: ElementType::Binary(uid),
+                    ..
+                } => {
+                    info.prev_uid = Some(uid);
+                }
+                Element {
+                    id: ids::NEXTUID,
+                    val: ElementType::Binary(uid),
+                    ..
+                } => {
+                    info.next_uid = Some(uid);
+                }
+                Element {
+                    id: ids::SEGMENTFAMILY,
+                    val: ElementType::Binary(uid),
+                    ..
+                } => {
+                    info.family_uids.push(uid);
+                }
                 Element {
                     id: ids::TITLE,
                     val: ElementType::UTF8(title),
@@ -767,6 +807,8 @@ impl Attachment {
 /// A complete set of chapters
 #[derive(Debug)]
 pub struct ChapterEdition {
+    /// The edition's UID
+    pub uid: Option<u64>,
     /// Whether the chapters should be hidden in the user interface
     pub hidden: bool,
     /// Whether the chapters should be the default
@@ -780,6 +822,7 @@ pub struct ChapterEdition {
 impl ChapterEdition {
     fn new() -> ChapterEdition {
         ChapterEdition {
+            uid: None,
             hidden: false,
             default: false,
             ordered: false,
@@ -807,6 +850,13 @@ impl ChapterEdition {
         let mut chapteredition = ChapterEdition::new();
         for e in elements {
             match e {
+                Element {
+                    id: ids::EDITIONUID,
+                    val: ElementType::UInt(uid),
+                    ..
+                } => {
+                    chapteredition.uid = Some(uid);
+                }
                 Element {
                     id: ids::EDITIONFLAGHIDDEN,
                     val: ElementType::UInt(hidden),
@@ -845,6 +895,8 @@ impl ChapterEdition {
 /// An individual chapter point
 #[derive(Debug)]
 pub struct Chapter {
+    /// The chapter's UID
+    pub uid: u64,
     /// Timestamp of the start of the chapter
     pub time_start: Duration,
     /// Timestamp of the end of the chapter
@@ -853,6 +905,10 @@ pub struct Chapter {
     pub hidden: bool,
     /// Whether the chapter point should be enabled in the user interface
     pub enabled: bool,
+    /// Unique ID of the segment to be played during this chapter
+    pub segment_uid: Option<Vec<u8>>,
+    /// Unique ID of the edition to play from the linked segment
+    pub segment_edition_uid: Option<u64>,
     /// Contains all strings to use for displaying chapter
     pub display: Vec<ChapterDisplay>,
 }
@@ -860,10 +916,13 @@ pub struct Chapter {
 impl Chapter {
     fn new() -> Chapter {
         Chapter {
+            uid: 0,
             time_start: Duration::default(),
             time_end: None,
             hidden: false,
             enabled: false,
+            segment_uid: None,
+            segment_edition_uid: None,
             display: Vec::new(),
         }
     }
@@ -872,6 +931,13 @@ impl Chapter {
         let mut chapter = Chapter::new();
         for e in elements {
             match e {
+                Element {
+                    id: ids::CHAPTERUID,
+                    val: ElementType::UInt(uid),
+                    ..
+                } => {
+                    chapter.uid = uid;
+                }
                 Element {
                     id: ids::CHAPTERTIMESTART,
                     val: ElementType::UInt(start),
@@ -899,6 +965,20 @@ impl Chapter {
                     ..
                 } => {
                     chapter.enabled = enabled != 0;
+                }
+                Element {
+                    id: ids::CHAPTERSEGMENTUID,
+                    val: ElementType::Binary(uid),
+                    ..
+                } => {
+                    chapter.segment_uid = Some(uid);
+                }
+                Element {
+                    id: ids::CHAPTERSEGMENTEDITIONUID,
+                    val: ElementType::UInt(uid),
+                    ..
+                } => {
+                    chapter.segment_edition_uid = Some(uid);
                 }
                 Element {
                     id: ids::CHAPTERDISPLAY,
