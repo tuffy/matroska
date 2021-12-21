@@ -625,6 +625,10 @@ pub struct Video {
     pub display_width: Option<u64>,
     /// Height of video frames to display
     pub display_height: Option<u64>,
+    /// Whether video is interlaced
+    pub interlaced: Option<bool>,
+    /// Stereo video mode
+    pub stereo: Option<StereoMode>,
 }
 
 impl Video {
@@ -634,6 +638,8 @@ impl Video {
             pixel_height: 0,
             display_width: None,
             display_height: None,
+            interlaced: None,
+            stereo: None,
         }
     }
 
@@ -667,10 +673,120 @@ impl Video {
                     val: ElementType::UInt(height),
                     ..
                 } => video.display_height = Some(height),
+                Element {
+                    id: ids::INTERLACED,
+                    val: ElementType::UInt(interlaced),
+                    ..
+                } => {
+                    video.interlaced = match interlaced {
+                        1 => Some(true),
+                        2 => Some(false),
+                        _ => None,
+                    }
+                }
+                Element {
+                    id: ids::STEREOMODE,
+                    val: ElementType::UInt(stereo),
+                    ..
+                } => {
+                    video.stereo = match stereo {
+                        0 => Some(StereoMode::Mono),
+                        1 => Some(StereoMode::SideBySide(EyeOrder::LeftFirst)),
+                        2 => Some(StereoMode::TopBottom(EyeOrder::RightFirst)),
+                        3 => Some(StereoMode::TopBottom(EyeOrder::LeftFirst)),
+                        4 => Some(StereoMode::Checkboard(EyeOrder::RightFirst)),
+                        5 => Some(StereoMode::Checkboard(EyeOrder::LeftFirst)),
+                        6 => Some(StereoMode::RowInterleaved(EyeOrder::RightFirst)),
+                        7 => Some(StereoMode::RowInterleaved(EyeOrder::LeftFirst)),
+                        8 => Some(StereoMode::ColumnInterleaved(EyeOrder::RightFirst)),
+                        9 => Some(StereoMode::ColumnInterleaved(EyeOrder::LeftFirst)),
+                        10 => Some(StereoMode::Anaglyph(StereoColors::CyanRed)),
+                        11 => Some(StereoMode::SideBySide(EyeOrder::RightFirst)),
+                        12 => Some(StereoMode::Anaglyph(StereoColors::GreenMagenta)),
+                        13 => Some(StereoMode::Interlaced(EyeOrder::LeftFirst)),
+                        14 => Some(StereoMode::Interlaced(EyeOrder::RightFirst)),
+                        _ => None,
+                    }
+                }
                 _ => {}
             }
         }
         video
+    }
+}
+
+/// How a video track may be displayed in stereo mode
+#[derive(Debug)]
+pub enum StereoMode {
+    /// mono
+    Mono,
+    /// side-by-side
+    SideBySide(EyeOrder),
+    /// top - bottom
+    TopBottom(EyeOrder),
+    /// checkboard
+    Checkboard(EyeOrder),
+    /// row interleaved
+    RowInterleaved(EyeOrder),
+    /// column interleaved
+    ColumnInterleaved(EyeOrder),
+    /// anaglyph
+    Anaglyph(StereoColors),
+    /// interlaced
+    Interlaced(EyeOrder),
+}
+
+impl std::fmt::Display for StereoMode {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            StereoMode::Mono => write!(f, "mono"),
+            StereoMode::SideBySide(o) => write!(f, "side by side ({})", o),
+            StereoMode::TopBottom(o) => write!(f, "top - bottom ({})", o),
+            StereoMode::Checkboard(o) => write!(f, "checkboard ({})", o),
+            StereoMode::RowInterleaved(o) => write!(f, "row interleaved ({})", o),
+            StereoMode::ColumnInterleaved(o) => write!(f, "column interleaved ({})", o),
+            StereoMode::Anaglyph(c) => write!(f, "anaglyph ({})", c),
+            StereoMode::Interlaced(o) => write!(f, "interlaced ({})", o),
+        }
+    }
+}
+
+/// Which eye is displayed first
+#[derive(Debug)]
+pub enum EyeOrder {
+    /// left eye is displayed first
+    LeftFirst,
+    /// right eye is displayed first
+    RightFirst,
+}
+
+impl std::fmt::Display for EyeOrder {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            EyeOrder::LeftFirst => write!(f, "left eye is first"),
+            EyeOrder::RightFirst => write!(f, "right eye is first"),
+        }
+    }
+}
+
+/// Which colors are used for anaglyph stereo 3D
+#[derive(Debug)]
+pub enum StereoColors {
+    /// cyan/red
+    CyanRed,
+    /// green/magenta
+    GreenMagenta,
+}
+
+impl std::fmt::Display for StereoColors {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            StereoColors::CyanRed => write!(f, "cyan/red"),
+            StereoColors::GreenMagenta => write!(f, "green/magenta"),
+        }
     }
 }
 
