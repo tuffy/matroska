@@ -716,7 +716,7 @@ impl Video {
 }
 
 /// How a video track may be displayed in stereo mode
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum StereoMode {
     /// mono
     Mono,
@@ -753,7 +753,7 @@ impl std::fmt::Display for StereoMode {
 }
 
 /// Which eye is displayed first
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum EyeOrder {
     /// left eye is displayed first
     LeftFirst,
@@ -772,7 +772,7 @@ impl std::fmt::Display for EyeOrder {
 }
 
 /// Which colors are used for anaglyph stereo 3D
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum StereoColors {
     /// cyan/red
     CyanRed,
