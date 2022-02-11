@@ -10,9 +10,8 @@ use std::string::FromUtf8Error;
 use std::{error, fmt, io};
 
 use bitstream_io::BitRead;
-use chrono::offset::Utc;
-use chrono::DateTime;
 use phf::{phf_set, Set};
+use time::OffsetDateTime;
 
 pub type Result<T> = std::result::Result<T, MatroskaError>;
 
@@ -145,7 +144,7 @@ pub enum ElementType {
     UTF8(String),
     Binary(Vec<u8>),
     Float(f64),
-    Date(DateTime<Utc>),
+    Date(OffsetDateTime),
 }
 
 /// A possible error when parsing a Matroska file
@@ -295,12 +294,12 @@ pub fn read_utf8(r: &mut dyn io::Read, size: u64) -> Result<String> {
     read_bin(r, size).and_then(|bytes| String::from_utf8(bytes).map_err(MatroskaError::UTF8))
 }
 
-pub fn read_date(r: &mut dyn io::Read, size: u64) -> Result<DateTime<Utc>> {
+pub fn read_date(r: &mut dyn io::Read, size: u64) -> Result<OffsetDateTime> {
     if size == 8 {
-        use chrono::Duration;
-        use chrono::TimeZone;
+        use time::macros::datetime;
 
-        read_int(r, size).map(|d| Utc.ymd(2001, 1, 1).and_hms(0, 0, 0) + Duration::nanoseconds(d))
+        read_int(r, size)
+            .map(|d| datetime!(2001-01-01 00:00:00 UTC) + time::Duration::nanoseconds(d))
     } else {
         Err(MatroskaError::InvalidDate)
     }

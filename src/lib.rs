@@ -33,8 +33,7 @@ use std::time::Duration;
 mod ebml;
 mod ids;
 
-use chrono::offset::Utc;
-use chrono::DateTime;
+use time::OffsetDateTime;
 
 pub use ebml::MatroskaError;
 use ebml::{Element, ElementType, Result};
@@ -274,7 +273,7 @@ pub struct Info {
     /// The file's duration
     pub duration: Option<Duration>,
     /// Production date
-    pub date_utc: Option<DateTime<Utc>>,
+    pub date_utc: Option<OffsetDateTime>,
     /// The muxing application or library
     pub muxing_app: String,
     /// The writing application
