@@ -387,28 +387,55 @@ impl Info {
 pub struct Track {
     /// The track number, starting from 1
     pub number: u64,
+
     /// The track's UID
     pub uid: u64,
+
     /// The track's type
     pub tracktype: Tracktype,
+
     /// If the track is usable
     pub enabled: bool,
+
     /// If the track should be active if no other preferences found
     pub default: bool,
+
     /// If the track *must* be active during playback
     pub forced: bool,
+
+    /// If the track is suitable for users with hearing impairments
+    pub hearing_impaired: Option<bool>,
+
+    /// If the track is suitable for users with visual impairments
+    pub visual_impaired: Option<bool>,
+
+    /// If the track contains textual descriptions of video content
+    pub text_descriptions: Option<bool>,
+
+    /// If the track is in the content's original language
+    pub original: Option<bool>,
+
+    /// If the track contains commentary
+    pub commentary: Option<bool>,
+
     /// If the track contains blocks using lacing
     pub interlaced: bool,
+
     /// Duration of each frame
     pub default_duration: Option<Duration>,
+
     /// A human-readable track name
     pub name: Option<String>,
+
     /// The track's language
     pub language: Option<Language>,
+
     /// The track's codec's ID
     pub codec_id: String,
+
     /// The track's codec's human-readable name
     pub codec_name: Option<String>,
+
     /// The track's audio or video settings
     pub settings: Settings,
 }
@@ -422,6 +449,11 @@ impl Track {
             enabled: true,
             default: true,
             forced: false,
+            hearing_impaired: None,
+            visual_impaired: None,
+            text_descriptions: None,
+            original: None,
+            commentary: None,
             interlaced: true,
             default_duration: None,
             name: None,
@@ -451,6 +483,11 @@ impl Track {
     fn build_entry(elements: Vec<Element>) -> Track {
         let mut track = Track::new();
         for e in elements {
+            // although the official specification lists
+            // the hearing impaired, visual impaired, text descriptions,
+            // original and commentary flags as unsigned ints,
+            // mpvpropedit sets them as binary, so I will support both
+
             match e {
                 Element {
                     id: ids::TRACKNUMBER,
@@ -493,6 +530,76 @@ impl Track {
                     ..
                 } => {
                     track.forced = forced != 0;
+                }
+                Element {
+                    id: ids::FLAGHEARINGIMPAIRED,
+                    val: ElementType::Binary(hearing_impaired),
+                    ..
+                } => {
+                    track.hearing_impaired = hearing_impaired.get(0).map(|b| *b != 0);
+                }
+                Element {
+                    id: ids::FLAGHEARINGIMPAIRED,
+                    val: ElementType::UInt(hearing_impaired),
+                    ..
+                } => {
+                    track.hearing_impaired = Some(hearing_impaired != 0);
+                }
+                Element {
+                    id: ids::FLAGVISUALIMPAIRED,
+                    val: ElementType::Binary(visual_impaired),
+                    ..
+                } => {
+                    track.visual_impaired = visual_impaired.get(0).map(|b| *b != 0);
+                }
+                Element {
+                    id: ids::FLAGVISUALIMPAIRED,
+                    val: ElementType::UInt(visual_impaired),
+                    ..
+                } => {
+                    track.visual_impaired = Some(visual_impaired != 0);
+                }
+                Element {
+                    id: ids::FLAGTEXTDESCRIPTIONS,
+                    val: ElementType::Binary(text_descriptions),
+                    ..
+                } => {
+                    track.text_descriptions = text_descriptions.get(0).map(|b| *b != 0);
+                }
+                Element {
+                    id: ids::FLAGTEXTDESCRIPTIONS,
+                    val: ElementType::UInt(text_descriptions),
+                    ..
+                } => {
+                    track.text_descriptions = Some(text_descriptions != 0);
+                }
+                Element {
+                    id: ids::FLAGORIGINAL,
+                    val: ElementType::Binary(original),
+                    ..
+                } => {
+                    track.original = original.get(0).map(|b| *b != 0);
+                }
+                Element {
+                    id: ids::FLAGORIGINAL,
+                    val: ElementType::UInt(original),
+                    ..
+                } => {
+                    track.original = Some(original != 0);
+                }
+                Element {
+                    id: ids::FLAGCOMMENTARY,
+                    val: ElementType::Binary(commentary),
+                    ..
+                } => {
+                    track.commentary = commentary.get(0).map(|b| *b != 0);
+                }
+                Element {
+                    id: ids::FLAGCOMMENTARY,
+                    val: ElementType::UInt(commentary),
+                    ..
+                } => {
+                    track.commentary = Some(commentary != 0);
                 }
                 Element {
                     id: ids::FLAGLACING,
