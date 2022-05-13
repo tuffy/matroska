@@ -26,7 +26,6 @@
 #![warn(missing_docs)]
 
 use std::collections::BTreeMap;
-use std::fs::File;
 use std::io;
 use std::time::Duration;
 
@@ -65,8 +64,7 @@ impl Matroska {
     }
 
     /// Parses contents of open Matroska file
-    pub fn open(mut file: File) -> Result<Matroska> {
-        use std::io::Seek;
+    pub fn open<R: io::Read + io::Seek>(mut file: R) -> Result<Matroska> {
         use std::io::SeekFrom;
 
         let mut matroska = Matroska::new();
