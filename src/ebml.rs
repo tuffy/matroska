@@ -1,4 +1,4 @@
-// Copyright 2017-2020 Brian Langenberger
+// Copyright 2017-2022 Brian Langenberger
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -164,6 +164,13 @@ pub enum MatroskaError {
     InvalidFloat,
     /// An invalid date value
     InvalidDate,
+}
+
+impl From<std::io::Error> for MatroskaError {
+    #[inline]
+    fn from(err: std::io::Error) -> Self {
+        Self::Io(err)
+    }
 }
 
 impl fmt::Display for MatroskaError {

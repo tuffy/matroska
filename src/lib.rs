@@ -1,4 +1,4 @@
-// Copyright 2017-2020 Brian Langenberger
+// Copyright 2017-2022 Brian Langenberger
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -71,53 +71,47 @@ impl Matroska {
 
         let (mut id_0, mut size_0, _) = ebml::read_element_id_size(&mut file)?;
         while id_0 != ids::SEGMENT {
-            file.seek(SeekFrom::Current(size_0 as i64))
-                .map(|_| ())
-                .map_err(MatroskaError::Io)?;
+            file.seek(SeekFrom::Current(size_0 as i64)).map(|_| ())?;
             let (id, size, _) = ebml::read_element_id_size(&mut file)?;
             id_0 = id;
             size_0 = size;
         }
 
-        let segment_start = file.seek(SeekFrom::Current(0)).map_err(MatroskaError::Io)?;
+        let segment_start = file.stream_position()?;
 
         while size_0 > 0 {
             let (id_1, size_1, len) = ebml::read_element_id_size(&mut file)?;
             match id_1 {
                 ids::SEEKHEAD => {
                     // if seektable encountered, populate file from that
-                    let seektable = Seektable::parse(&mut file, size_1)?;
+                    let seektable = Seektable::parse(&mut file, segment_start, size_1)?;
+
                     if let Some(pos) = seektable.get(ids::INFO) {
-                        file.seek(SeekFrom::Start(pos + segment_start))
-                            .map_err(MatroskaError::Io)?;
+                        file.seek(SeekFrom::Start(pos + segment_start))?;
                         let (i, s, _) = ebml::read_element_id_size(&mut file)?;
                         assert_eq!(i, ids::INFO);
                         matroska.info = Info::parse(&mut file, s)?;
                     }
                     if let Some(pos) = seektable.get(ids::TRACKS) {
-                        file.seek(SeekFrom::Start(pos + segment_start))
-                            .map_err(MatroskaError::Io)?;
+                        file.seek(SeekFrom::Start(pos + segment_start))?;
                         let (i, s, _) = ebml::read_element_id_size(&mut file)?;
                         assert_eq!(i, ids::TRACKS);
                         matroska.tracks = Track::parse(&mut file, s)?;
                     }
                     if let Some(pos) = seektable.get(ids::ATTACHMENTS) {
-                        file.seek(SeekFrom::Start(pos + segment_start))
-                            .map_err(MatroskaError::Io)?;
+                        file.seek(SeekFrom::Start(pos + segment_start))?;
                         let (i, s, _) = ebml::read_element_id_size(&mut file)?;
                         assert_eq!(i, ids::ATTACHMENTS);
                         matroska.attachments = Attachment::parse(&mut file, s)?;
                     }
                     if let Some(pos) = seektable.get(ids::CHAPTERS) {
-                        file.seek(SeekFrom::Start(pos + segment_start))
-                            .map_err(MatroskaError::Io)?;
+                        file.seek(SeekFrom::Start(pos + segment_start))?;
                         let (i, s, _) = ebml::read_element_id_size(&mut file)?;
                         assert_eq!(i, ids::CHAPTERS);
                         matroska.chapters = ChapterEdition::parse(&mut file, s)?;
                     }
                     if let Some(pos) = seektable.get(ids::TAGS) {
-                        file.seek(SeekFrom::Start(pos + segment_start))
-                            .map_err(MatroskaError::Io)?;
+                        file.seek(SeekFrom::Start(pos + segment_start))?;
                         let (i, s, _) = ebml::read_element_id_size(&mut file)?;
                         assert_eq!(i, ids::TAGS);
                         matroska.tags = Tag::parse(&mut file, s)?;
@@ -141,9 +135,7 @@ impl Matroska {
                     matroska.tags = Tag::parse(&mut file, size_1)?;
                 }
                 _ => {
-                    file.seek(SeekFrom::Current(size_1 as i64))
-                        .map(|_| ())
-                        .map_err(MatroskaError::Io)?;
+                    file.seek(SeekFrom::Current(size_1 as i64)).map(|_| ())?;
                 }
             }
             size_0 -= len;
@@ -195,20 +187,34 @@ impl Seektable {
         self.seek.get(&id).cloned()
     }
 
-    fn parse(r: &mut dyn io::Read, size: u64) -> Result<Seektable> {
+    fn parse<R>(r: &mut R, segment_start: u64, mut size: u64) -> Result<Seektable>
+    where
+        R: io::Read + io::Seek,
+    {
         let mut seektable = Seektable::new();
-        for e in Element::parse_master(r, size)? {
-            if let Element {
-                id: ids::SEEK,
-                val: ElementType::Master(sub_elements),
-                ..
-            } = e
-            {
-                let seek = Seek::build(sub_elements);
-                seektable.seek.insert(seek.id(), seek.position);
+        loop {
+            for e in Element::parse_master(r, size)? {
+                if let Element {
+                    id: ids::SEEK,
+                    val: ElementType::Master(sub_elements),
+                    ..
+                } = e
+                {
+                    let seek = Seek::build(sub_elements);
+                    seektable.seek.insert(seek.id(), seek.position);
+                }
+            }
+
+            match seektable.seek.remove(&ids::SEEKHEAD) {
+                Some(next_table) => {
+                    r.seek(io::SeekFrom::Start(next_table + segment_start))?;
+                    let (id, new_size, _) = ebml::read_element_id_size(r)?;
+                    assert!(id == ids::SEEKHEAD);
+                    size = new_size;
+                }
+                None => break Ok(seektable),
             }
         }
-        Ok(seektable)
     }
 }
 
