@@ -146,31 +146,22 @@ impl Matroska {
     }
 
     /// Returns all tracks with a type of "video"
-    pub fn video_tracks(&self) -> Vec<&Track> {
-        self.tracks
-            .iter()
-            .filter(|t| t.tracktype == Tracktype::Video)
-            .collect()
+    pub fn video_tracks(&self) -> impl Iterator<Item = &Track> {
+        self.tracks.iter().filter(|t| t.is_video())
     }
 
     /// Returns all tracks with a type of "audio"
-    pub fn audio_tracks(&self) -> Vec<&Track> {
-        self.tracks
-            .iter()
-            .filter(|t| t.tracktype == Tracktype::Audio)
-            .collect()
+    pub fn audio_tracks(&self) -> impl Iterator<Item = &Track> {
+        self.tracks.iter().filter(|t| t.is_audio())
     }
 
     /// Returns all tracks with a type of "subtitle"
-    pub fn subtitle_tracks(&self) -> Vec<&Track> {
-        self.tracks
-            .iter()
-            .filter(|t| t.tracktype == Tracktype::Subtitle)
-            .collect()
+    pub fn subtitle_tracks(&self) -> impl Iterator<Item = &Track> {
+        self.tracks.iter().filter(|t| t.is_subtitle())
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Seektable {
     seek: BTreeMap<u32, u64>,
 }
@@ -218,7 +209,7 @@ impl Seektable {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Seek {
     id: Vec<u8>,
     position: u64,
@@ -262,7 +253,7 @@ impl Seek {
 }
 
 /// An Info segment with information pertaining to the entire file
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Info {
     /// The file's UID
     pub uid: Option<Vec<u8>>,
@@ -387,7 +378,7 @@ impl Info {
 }
 
 /// A TrackEntry segment in the Tracks segment container
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Track {
     /// The track number, starting from 1
     pub number: u64,
@@ -466,6 +457,24 @@ impl Track {
             codec_name: None,
             settings: Settings::None,
         }
+    }
+
+    /// returns `true` if track is video
+    #[inline]
+    fn is_video(&self) -> bool {
+        matches!(self.tracktype, Tracktype::Video)
+    }
+
+    /// returns `true` if track is audio
+    #[inline]
+    fn is_audio(&self) -> bool {
+        matches!(self.tracktype, Tracktype::Audio)
+    }
+
+    /// returns `true` if track is subtitle
+    #[inline]
+    fn is_subtitle(&self) -> bool {
+        matches!(self.tracktype, Tracktype::Subtitle)
     }
 
     fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<Track>> {
@@ -678,7 +687,7 @@ impl Track {
 }
 
 /// The type of a given track
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub enum Tracktype {
     /// A video track
     Video,
@@ -714,7 +723,7 @@ impl Tracktype {
 }
 
 /// The settings a track may have
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Settings {
     /// No settings (for non audio/video tracks)
     None,
@@ -725,7 +734,7 @@ pub enum Settings {
 }
 
 /// A video track's specifications
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Video {
     /// Width of encoded video frames in pixels
     pub pixel_width: u64,
@@ -826,7 +835,7 @@ impl Video {
 }
 
 /// How a video track may be displayed in stereo mode
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum StereoMode {
     /// mono
     Mono,
@@ -863,7 +872,7 @@ impl std::fmt::Display for StereoMode {
 }
 
 /// Which eye is displayed first
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub enum EyeOrder {
     /// left eye is displayed first
     LeftFirst,
@@ -882,7 +891,7 @@ impl std::fmt::Display for EyeOrder {
 }
 
 /// Which colors are used for anaglyph stereo 3D
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub enum StereoColors {
     /// cyan/red
     CyanRed,
@@ -901,7 +910,7 @@ impl std::fmt::Display for StereoColors {
 }
 
 /// An audio track's specifications
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Audio {
     /// The sample rate in Hz
     pub sample_rate: f64,
@@ -953,7 +962,7 @@ impl Audio {
 }
 
 /// An attached file (often used for cover art)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Attachment {
     /// A human-friendly name for the file
     pub description: Option<String>,
@@ -1031,7 +1040,7 @@ impl Attachment {
 }
 
 /// A complete set of chapters
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ChapterEdition {
     /// The edition's UID
     pub uid: Option<u64>,
@@ -1119,7 +1128,7 @@ impl ChapterEdition {
 }
 
 /// An individual chapter point
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Chapter {
     /// The chapter's UID
     pub uid: u64,
@@ -1221,7 +1230,7 @@ impl Chapter {
 }
 
 /// The display string for a chapter point entry
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ChapterDisplay {
     /// The user interface string
     pub string: String,
@@ -1347,7 +1356,7 @@ pub struct Target {
 }
 
 /// The type of value the tag is for
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub enum TargetTypeValue {
     /// collection
     Collection,
@@ -1471,7 +1480,7 @@ impl Target {
 }
 
 /// General information about the target
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SimpleTag {
     /// The tag's name
     pub name: String,
@@ -1549,7 +1558,7 @@ impl SimpleTag {
 }
 
 /// Which form of language is in use
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Language {
     /// Language formatted as ISO-639
     ISO639(String),
@@ -1558,7 +1567,7 @@ pub enum Language {
 }
 
 /// A tag's value
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TagValue {
     /// Tag's value as string
     String(String),
