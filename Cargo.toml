@@ -11,6 +11,6 @@ repository = "https://github.com/tuffy/matroska"
 edition = "2018"
 
 [dependencies]
-bitstream-io = "1.2"
+bitstream-io = "1.3"
 phf = { version = "0.10", features = ["macros"] }
 time = { version = "0.3", features = ["macros"] }

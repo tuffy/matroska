@@ -299,7 +299,7 @@ impl Info {
         }
     }
 
-    fn parse(r: &mut dyn io::Read, size: u64) -> Result<Info> {
+    fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Info> {
         let mut info = Info::new();
         let mut timecode_scale = None;
         let mut duration = None;
@@ -468,7 +468,7 @@ impl Track {
         }
     }
 
-    fn parse(r: &mut dyn io::Read, size: u64) -> Result<Vec<Track>> {
+    fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<Track>> {
         Element::parse_master(r, size).map(|elements| {
             elements
                 .into_iter()
@@ -975,7 +975,7 @@ impl Attachment {
         }
     }
 
-    fn parse(r: &mut dyn io::Read, size: u64) -> Result<Vec<Attachment>> {
+    fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<Attachment>> {
         Element::parse_master(r, size).map(|elements| {
             elements
                 .into_iter()
@@ -1056,7 +1056,7 @@ impl ChapterEdition {
         }
     }
 
-    fn parse(r: &mut dyn io::Read, size: u64) -> Result<Vec<ChapterEdition>> {
+    fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<ChapterEdition>> {
         Element::parse_master(r, size).map(|elements| {
             elements
                 .into_iter()
@@ -1288,7 +1288,7 @@ impl Tag {
         }
     }
 
-    fn parse(r: &mut dyn io::Read, size: u64) -> Result<Vec<Tag>> {
+    fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<Tag>> {
         Element::parse_master(r, size).map(|elements| {
             elements
                 .into_iter()

@@ -15,7 +15,7 @@ use time::OffsetDateTime;
 
 pub type Result<T> = std::result::Result<T, MatroskaError>;
 
-type BitReader<'a> = bitstream_io::BitReader<&'a mut dyn io::Read, bitstream_io::BigEndian>;
+type BitReader<R> = bitstream_io::BitReader<R, bitstream_io::BigEndian>;
 
 /// An EBML tree element
 #[derive(Debug)]
@@ -97,7 +97,7 @@ static IDS_FLOAT: Set<u32> = phf_set! {
 };
 
 impl Element {
-    pub fn parse(r: &mut dyn io::Read) -> Result<Element> {
+    pub fn parse<R: io::Read>(r: &mut R) -> Result<Element> {
         let (id, size, header_len) = read_element_id_size(r)?;
         let val = Element::parse_body(r, id, size)?;
         Ok(Element {
@@ -107,7 +107,7 @@ impl Element {
         })
     }
 
-    pub fn parse_body(r: &mut dyn io::Read, id: u32, size: u64) -> Result<ElementType> {
+    pub fn parse_body<R: io::Read>(r: &mut R, id: u32, size: u64) -> Result<ElementType> {
         match id {
             id if IDS_MASTER.contains(&id) => {
                 Element::parse_master(r, size).map(ElementType::Master)
@@ -123,7 +123,7 @@ impl Element {
         }
     }
 
-    pub fn parse_master(r: &mut dyn io::Read, mut size: u64) -> Result<Vec<Element>> {
+    pub fn parse_master<R: io::Read>(r: &mut R, mut size: u64) -> Result<Vec<Element>> {
         let mut elements = Vec::new();
         while size > 0 {
             let e = Element::parse(r)?;
@@ -187,17 +187,9 @@ impl fmt::Display for MatroskaError {
     }
 }
 
-impl error::Error for MatroskaError {
-    fn cause(&self) -> Option<&dyn error::Error> {
-        match self {
-            MatroskaError::Io(error) => Some(error),
-            MatroskaError::UTF8(error) => Some(error),
-            _ => None,
-        }
-    }
-}
+impl error::Error for MatroskaError {}
 
-pub fn read_element_id_size(reader: &mut dyn io::Read) -> Result<(u32, u64, u64)> {
+pub fn read_element_id_size<R: io::Read>(reader: &mut R) -> Result<(u32, u64, u64)> {
     let mut r = BitReader::new(reader);
     let (id, id_len) = read_element_id(&mut r)?;
     let (size, size_len) = read_element_size(&mut r)?;
@@ -257,7 +249,7 @@ fn read_element_size<R: BitRead>(r: &mut R) -> Result<(u64, u64)> {
     }
 }
 
-pub fn read_int(r: &mut dyn io::Read, size: u64) -> Result<i64> {
+pub fn read_int<R: io::Read>(r: &mut R, size: u64) -> Result<i64> {
     let mut r = BitReader::new(r);
     match size {
         0 => Ok(0),
@@ -266,7 +258,7 @@ pub fn read_int(r: &mut dyn io::Read, size: u64) -> Result<i64> {
     }
 }
 
-pub fn read_uint(r: &mut dyn io::Read, size: u64) -> Result<u64> {
+pub fn read_uint<R: io::Read>(r: &mut R, size: u64) -> Result<u64> {
     let mut r = BitReader::new(r);
     match size {
         0 => Ok(0),
@@ -275,7 +267,7 @@ pub fn read_uint(r: &mut dyn io::Read, size: u64) -> Result<u64> {
     }
 }
 
-pub fn read_float(r: &mut dyn io::Read, size: u64) -> Result<f64> {
+pub fn read_float<R: io::Read>(r: &mut R, size: u64) -> Result<f64> {
     let mut r = BitReader::new(r);
     match size {
         4 => {
@@ -292,16 +284,16 @@ pub fn read_float(r: &mut dyn io::Read, size: u64) -> Result<f64> {
     }
 }
 
-pub fn read_string(r: &mut dyn io::Read, size: u64) -> Result<String> {
+pub fn read_string<R: io::Read>(r: &mut R, size: u64) -> Result<String> {
     /*FIXME - limit this to ASCII set*/
     read_bin(r, size).and_then(|bytes| String::from_utf8(bytes).map_err(MatroskaError::UTF8))
 }
 
-pub fn read_utf8(r: &mut dyn io::Read, size: u64) -> Result<String> {
+pub fn read_utf8<R: io::Read>(r: &mut R, size: u64) -> Result<String> {
     read_bin(r, size).and_then(|bytes| String::from_utf8(bytes).map_err(MatroskaError::UTF8))
 }
 
-pub fn read_date(r: &mut dyn io::Read, size: u64) -> Result<OffsetDateTime> {
+pub fn read_date<R: io::Read>(r: &mut R, size: u64) -> Result<OffsetDateTime> {
     if size == 8 {
         use time::macros::datetime;
 
@@ -312,7 +304,7 @@ pub fn read_date(r: &mut dyn io::Read, size: u64) -> Result<OffsetDateTime> {
     }
 }
 
-pub fn read_bin(r: &mut dyn io::Read, size: u64) -> Result<Vec<u8>> {
+pub fn read_bin<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<u8>> {
     let mut buf = vec![0; size as usize];
     r.read_exact(&mut buf)
         .map(|()| buf)
