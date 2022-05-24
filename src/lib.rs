@@ -38,7 +38,7 @@ pub use ebml::MatroskaError;
 use ebml::{Element, ElementType, Result};
 
 /// A Matroska file
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Matroska {
     /// The file's Info segment
     pub info: Info,
@@ -170,7 +170,7 @@ impl Matroska {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Seektable {
     seek: BTreeMap<u32, u64>,
 }
@@ -218,7 +218,7 @@ impl Seektable {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Seek {
     id: Vec<u8>,
     position: u64,
@@ -262,7 +262,7 @@ impl Seek {
 }
 
 /// An Info segment with information pertaining to the entire file
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Info {
     /// The file's UID
     pub uid: Option<Vec<u8>>,
@@ -387,7 +387,7 @@ impl Info {
 }
 
 /// A TrackEntry segment in the Tracks segment container
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Track {
     /// The track number, starting from 1
     pub number: u64,
@@ -678,7 +678,7 @@ impl Track {
 }
 
 /// The type of a given track
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum Tracktype {
     /// A video track
     Video,
@@ -714,7 +714,7 @@ impl Tracktype {
 }
 
 /// The settings a track may have
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Settings {
     /// No settings (for non audio/video tracks)
     None,
@@ -725,7 +725,7 @@ pub enum Settings {
 }
 
 /// A video track's specifications
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Video {
     /// Width of encoded video frames in pixels
     pub pixel_width: u64,
@@ -901,7 +901,7 @@ impl std::fmt::Display for StereoColors {
 }
 
 /// An audio track's specifications
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Audio {
     /// The sample rate in Hz
     pub sample_rate: f64,
@@ -953,7 +953,7 @@ impl Audio {
 }
 
 /// An attached file (often used for cover art)
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Attachment {
     /// A human-friendly name for the file
     pub description: Option<String>,
@@ -1031,7 +1031,7 @@ impl Attachment {
 }
 
 /// A complete set of chapters
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ChapterEdition {
     /// The edition's UID
     pub uid: Option<u64>,
@@ -1119,7 +1119,7 @@ impl ChapterEdition {
 }
 
 /// An individual chapter point
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Chapter {
     /// The chapter's UID
     pub uid: u64,
@@ -1221,7 +1221,7 @@ impl Chapter {
 }
 
 /// The display string for a chapter point entry
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ChapterDisplay {
     /// The user interface string
     pub string: String,
@@ -1272,7 +1272,7 @@ impl ChapterDisplay {
 }
 
 /// An attached tag
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Tag {
     /// which elements the metadata's tag applies to
     pub targets: Option<Target>,
@@ -1330,7 +1330,7 @@ impl Tag {
 }
 
 /// Which elements the metadata's tag applies to
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Target {
     /// Logical level of target
     pub target_type_value: Option<TargetTypeValue>,
@@ -1347,7 +1347,7 @@ pub struct Target {
 }
 
 /// The type of value the tag is for
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum TargetTypeValue {
     /// collection
     Collection,
@@ -1471,7 +1471,7 @@ impl Target {
 }
 
 /// General information about the target
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SimpleTag {
     /// The tag's name
     pub name: String,
@@ -1549,7 +1549,7 @@ impl SimpleTag {
 }
 
 /// Which form of language is in use
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Language {
     /// Language formatted as ISO-639
     ISO639(String),
@@ -1558,7 +1558,7 @@ pub enum Language {
 }
 
 /// A tag's value
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TagValue {
     /// Tag's value as string
     String(String),
