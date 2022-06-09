@@ -164,6 +164,11 @@ pub enum MatroskaError {
     InvalidFloat,
     /// An invalid date value
     InvalidDate,
+    /// Invalid seek head entry
+    InvalidSeekHead {
+        /// The invalid id
+        id: u32,
+    },
 }
 
 impl From<std::io::Error> for MatroskaError {
@@ -183,6 +188,7 @@ impl fmt::Display for MatroskaError {
             MatroskaError::InvalidUint => write!(f, "invalid unsigned integer"),
             MatroskaError::InvalidFloat => write!(f, "invalid float"),
             MatroskaError::InvalidDate => write!(f, "invalid date"),
+            MatroskaError::InvalidSeekHead { id } => write!(f, "invalid seek head id={}", id),
         }
     }
 }
