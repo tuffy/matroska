@@ -86,32 +86,32 @@ impl Matroska {
                     // if seektable encountered, populate file from that
                     let seektable = Seektable::parse(&mut file, segment_start, size_1)?;
 
-                    if let Some(pos) = seektable.get(ids::INFO) {
-                        file.seek(SeekFrom::Start(pos + segment_start))?;
+                    if let Some(pos) = seektable.get(ids::INFO)? {
+                        file.seek(SeekFrom::Start(pos))?;
                         let (i, s, _) = ebml::read_element_id_size(&mut file)?;
                         assert_eq!(i, ids::INFO);
                         matroska.info = Info::parse(&mut file, s)?;
                     }
-                    if let Some(pos) = seektable.get(ids::TRACKS) {
-                        file.seek(SeekFrom::Start(pos + segment_start))?;
+                    if let Some(pos) = seektable.get(ids::TRACKS)? {
+                        file.seek(SeekFrom::Start(pos))?;
                         let (i, s, _) = ebml::read_element_id_size(&mut file)?;
                         assert_eq!(i, ids::TRACKS);
                         matroska.tracks = Track::parse(&mut file, s)?;
                     }
-                    if let Some(pos) = seektable.get(ids::ATTACHMENTS) {
-                        file.seek(SeekFrom::Start(pos + segment_start))?;
+                    if let Some(pos) = seektable.get(ids::ATTACHMENTS)? {
+                        file.seek(SeekFrom::Start(pos))?;
                         let (i, s, _) = ebml::read_element_id_size(&mut file)?;
                         assert_eq!(i, ids::ATTACHMENTS);
                         matroska.attachments = Attachment::parse(&mut file, s)?;
                     }
-                    if let Some(pos) = seektable.get(ids::CHAPTERS) {
-                        file.seek(SeekFrom::Start(pos + segment_start))?;
+                    if let Some(pos) = seektable.get(ids::CHAPTERS)? {
+                        file.seek(SeekFrom::Start(pos))?;
                         let (i, s, _) = ebml::read_element_id_size(&mut file)?;
                         assert_eq!(i, ids::CHAPTERS);
                         matroska.chapters = ChapterEdition::parse(&mut file, s)?;
                     }
-                    if let Some(pos) = seektable.get(ids::TAGS) {
-                        file.seek(SeekFrom::Start(pos + segment_start))?;
+                    if let Some(pos) = seektable.get(ids::TAGS)? {
+                        file.seek(SeekFrom::Start(pos))?;
                         let (i, s, _) = ebml::read_element_id_size(&mut file)?;
                         assert_eq!(i, ids::TAGS);
                         matroska.tags = Tag::parse(&mut file, s)?;
@@ -163,26 +163,36 @@ impl Matroska {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Seektable {
+    offset: u64, // The file offset of the Seektable
     seek: BTreeMap<u32, u64>,
 }
 
 impl Seektable {
-    fn new() -> Seektable {
+    fn new(offset: u64) -> Seektable {
         Seektable {
+            offset,
             seek: BTreeMap::new(),
         }
     }
 
     #[inline]
-    fn get(&self, id: u32) -> Option<u64> {
-        self.seek.get(&id).cloned()
+    fn get(&self, id: u32) -> Result<Option<u64>> {
+        if let Some(position) = self.seek.get(&id) {
+            if let Some(offset) = self.offset.checked_add(*position) {
+                Ok(Some(offset))
+            } else {
+                Err(MatroskaError::InvalidSeekHead { id })
+            }
+        } else {
+            Ok(None)
+        }
     }
 
     fn parse<R>(r: &mut R, segment_start: u64, mut size: u64) -> Result<Seektable>
     where
         R: io::Read + io::Seek,
     {
-        let mut seektable = Seektable::new();
+        let mut seektable = Seektable::new(segment_start);
         loop {
             for e in Element::parse_master(r, size)? {
                 if let Element {
