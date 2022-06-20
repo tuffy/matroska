@@ -41,6 +41,7 @@ pub const NAME: u32 = 0x536E;
 pub const LANGUAGE: u32 = 0x22_B59C;
 pub const LANGUAGE_IETF: u32 = 0x22_B59D;
 pub const CODEC_ID: u32 = 0x86;
+pub const CODEC_PRIVATE: u32 = 0x63A2;
 pub const CODEC_NAME: u32 = 0x25_8688;
 pub const VIDEO: u32 = 0xE0;
 pub const PIXELWIDTH: u32 = 0xB0;

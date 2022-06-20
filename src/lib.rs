@@ -438,6 +438,9 @@ pub struct Track {
     /// The track's codec's ID
     pub codec_id: String,
 
+    /// Private data known only to the codec
+    pub codec_private: Option<Vec<u8>>,
+
     /// The track's codec's human-readable name
     pub codec_name: Option<String>,
 
@@ -464,6 +467,7 @@ impl Track {
             name: None,
             language: None,
             codec_id: String::new(),
+            codec_private: None,
             codec_name: None,
             settings: Settings::None,
         }
@@ -667,6 +671,13 @@ impl Track {
                     ..
                 } => {
                     track.codec_id = codec_id;
+                }
+                Element {
+                    id: ids::CODEC_PRIVATE,
+                    val: ElementType::Binary(private_data),
+                    ..
+                } => {
+                    track.codec_private = Some(private_data);
                 }
                 Element {
                     id: ids::CODEC_NAME,
