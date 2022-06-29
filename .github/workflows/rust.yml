@@ -1,0 +1,52 @@
+name: Rust
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  rust-ci:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+
+      - name: Setup rust smart caching
+        uses: Swatinem/rust-cache@v1.3.0
+
+      - name: Run cargo fmt
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
+      - name: Run cargo clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --no-deps -- -D warnings
+      
+      - name: Run cargo build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+      
+      - name: Run cargo test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test

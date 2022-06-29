@@ -10,7 +10,7 @@ use std::string::FromUtf8Error;
 use std::{error, fmt, io};
 
 use bitstream_io::BitRead;
-use phf::{phf_set, Set};
+use phf::{phf_map, phf_set, Map, Set};
 use time::OffsetDateTime;
 
 pub type Result<T> = std::result::Result<T, MatroskaError>;
@@ -25,7 +25,7 @@ pub struct Element {
     pub val: ElementType,
 }
 
-static IDS_MASTER: Set<u32> = phf_set! {
+static IDS_MASTER_DEFAULT: Set<u32> = phf_set! {
     0x80u32, 0x8Eu32, 0x8Fu32, 0xA0u32, 0xA6u32, 0xAEu32, 0xB6u32,
     0xB7u32, 0xBBu32, 0xC8u32, 0xDBu32, 0xE0u32, 0xE1u32, 0xE2u32,
     0xE3u32, 0xE4u32, 0xE8u32, 0xE9u32, 0x45B9u32, 0x4DBBu32,
@@ -35,6 +35,34 @@ static IDS_MASTER: Set<u32> = phf_set! {
     0x1043_A770u32, 0x114D_9B74u32, 0x1254_C367u32, 0x1549_A966u32,
     0x1654_AE6Bu32, 0x1853_8067u32, 0x1941_A469u32, 0x1A45_DFA3u32,
     0x1B53_8667u32, 0x1C53_BB6Bu32, 0x1F43_B675u32
+};
+
+static IDS_INFO_MASTER: Set<u32> = phf_set! {
+    0x6924u32,
+};
+
+static IDS_TRACKS_MASTER: Set<u32> = phf_set! {
+    0x6924u32, 0xAEu32,
+};
+
+static IDS_ATTACHMENTS_MASTER: Set<u32> = phf_set! {
+    0x61A7u32,
+};
+
+static IDS_CHAPTERS_MASTER: Set<u32> = phf_set! {
+    0x45B9u32,
+};
+
+static IDS_TAGS_MASTER: Set<u32> = phf_set! {
+    0x7373u32,
+};
+
+static IDS_MASTER: Map<u32, &'static Set<u32>> = phf_map! {
+    0x1549_A966u32 => &IDS_INFO_MASTER,
+    0x1654_AE6Bu32 => &IDS_TRACKS_MASTER,
+    0x1941_A469u32 => &IDS_ATTACHMENTS_MASTER,
+    0x1043_A770u32 => &IDS_CHAPTERS_MASTER,
+    0x1254_C367u32 => &IDS_TAGS_MASTER,
 };
 
 static IDS_INT: Set<u32> = phf_set! {
@@ -97,9 +125,9 @@ static IDS_FLOAT: Set<u32> = phf_set! {
 };
 
 impl Element {
-    pub fn parse<R: io::Read>(r: &mut R) -> Result<Element> {
+    pub fn parse<R: io::Read>(r: &mut R, parent_id: Option<u32>) -> Result<Element> {
         let (id, size, header_len) = read_element_id_size(r)?;
-        let val = Element::parse_body(r, id, size)?;
+        let val = Element::parse_body(r, id, size, parent_id)?;
         Ok(Element {
             id,
             size: header_len + size,
@@ -107,10 +135,19 @@ impl Element {
         })
     }
 
-    pub fn parse_body<R: io::Read>(r: &mut R, id: u32, size: u64) -> Result<ElementType> {
+    pub fn parse_body<R: io::Read>(
+        r: &mut R,
+        id: u32,
+        size: u64,
+        parent_id: Option<u32>,
+    ) -> Result<ElementType> {
+        let ids_master = match parent_id {
+            Some(parent_id) => *IDS_MASTER.get(&parent_id).unwrap_or(&&IDS_MASTER_DEFAULT),
+            None => &IDS_MASTER_DEFAULT,
+        };
         match id {
-            id if IDS_MASTER.contains(&id) => {
-                Element::parse_master(r, size).map(ElementType::Master)
+            id if ids_master.contains(&id) => {
+                Element::parse_master(r, size, Some(id)).map(ElementType::Master)
             }
             id if IDS_INT.contains(&id) => read_int(r, size).map(ElementType::Int),
             id if IDS_UINT.contains(&id) => read_uint(r, size).map(ElementType::UInt),
@@ -123,10 +160,14 @@ impl Element {
         }
     }
 
-    pub fn parse_master<R: io::Read>(r: &mut R, mut size: u64) -> Result<Vec<Element>> {
+    pub fn parse_master<R: io::Read>(
+        r: &mut R,
+        mut size: u64,
+        parent_id: Option<u32>,
+    ) -> Result<Vec<Element>> {
         let mut elements = Vec::new();
         while size > 0 {
-            let e = Element::parse(r)?;
+            let e = Element::parse(r, parent_id)?;
             if e.size > size {
                 return Err(MatroskaError::InvalidSize);
             }
