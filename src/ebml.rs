@@ -127,7 +127,9 @@ impl Element {
         let mut elements = Vec::new();
         while size > 0 {
             let e = Element::parse(r)?;
-            assert!(e.size <= size);
+            if e.size > size {
+                return Err(MatroskaError::InvalidSize);
+            }
             size -= e.size;
             elements.push(e);
         }
