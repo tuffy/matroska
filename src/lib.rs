@@ -12,7 +12,7 @@
 //! which one can use directly.
 //!
 //! ## Example
-//! ```
+//! ```no_run
 //! use std::fs::File;
 //! use matroska::Matroska;
 //! let f = File::open("filename.mkv").unwrap();
@@ -194,7 +194,7 @@ impl Seektable {
     {
         let mut seektable = Seektable::new(segment_start);
         loop {
-            for e in Element::parse_master(r, size)? {
+            for e in Element::parse_master(r, size, Some(ids::SEGMENT))? {
                 if let Element {
                     id: ids::SEEK,
                     val: ElementType::Master(sub_elements),
@@ -305,7 +305,7 @@ impl Info {
         let mut timecode_scale = None;
         let mut duration = None;
 
-        for e in Element::parse_master(r, size)? {
+        for e in Element::parse_master(r, size, Some(ids::INFO))? {
             match e {
                 Element {
                     id: ids::SEGMENTUID,
@@ -492,7 +492,7 @@ impl Track {
     }
 
     fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<Track>> {
-        Element::parse_master(r, size).map(|elements| {
+        Element::parse_master(r, size, Some(ids::TRACKENTRY)).map(|elements| {
             elements
                 .into_iter()
                 .filter_map(|e| match e {
@@ -1006,7 +1006,7 @@ impl Attachment {
     }
 
     fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<Attachment>> {
-        Element::parse_master(r, size).map(|elements| {
+        Element::parse_master(r, size, Some(ids::ATTACHEDFILE)).map(|elements| {
             elements
                 .into_iter()
                 .filter_map(|e| match e {
@@ -1087,7 +1087,7 @@ impl ChapterEdition {
     }
 
     fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<ChapterEdition>> {
-        Element::parse_master(r, size).map(|elements| {
+        Element::parse_master(r, size, Some(ids::EDITIONENTRY)).map(|elements| {
             elements
                 .into_iter()
                 .filter_map(|e| match e {
@@ -1319,7 +1319,7 @@ impl Tag {
     }
 
     fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<Tag>> {
-        Element::parse_master(r, size).map(|elements| {
+        Element::parse_master(r, size, Some(ids::TAG)).map(|elements| {
             elements
                 .into_iter()
                 .filter_map(|e| match e {
