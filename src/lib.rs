@@ -755,7 +755,7 @@ pub enum Settings {
 }
 
 /// A video track's specifications
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Video {
     /// Width of encoded video frames in pixels
     pub pixel_width: u64,
@@ -769,6 +769,8 @@ pub struct Video {
     pub interlaced: Option<bool>,
     /// Stereo video mode
     pub stereo: Option<StereoMode>,
+    /// Gamma
+    pub gamma: Option<f64>,
 }
 
 impl Video {
@@ -780,6 +782,7 @@ impl Video {
             display_height: None,
             interlaced: None,
             stereo: None,
+            gamma: None,
         }
     }
 
@@ -823,6 +826,13 @@ impl Video {
                         2 => Some(false),
                         _ => None,
                     }
+                }
+                Element {
+                    id: ids::GAMMA,
+                    val: ElementType::Float(gamma),
+                    ..
+                } => {
+                    video.gamma = Some(gamma);
                 }
                 Element {
                     id: ids::STEREOMODE,

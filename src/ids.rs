@@ -94,3 +94,4 @@ pub const TAGLANGUAGE_IETF: u32 = 0x447B;
 pub const TAGDEFAULT: u32 = 0x4484;
 pub const TAGSTRING: u32 = 0x4487;
 pub const TAGBINARY: u32 = 0x4485;
+pub const GAMMA: u32 = 0x2FB523;
