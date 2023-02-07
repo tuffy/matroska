@@ -145,6 +145,53 @@ impl Matroska {
         Ok(matroska)
     }
 
+    /// Returns a single item from the Matroska file such as Info
+    pub fn get<R, P>(mut file: R) -> Result<Option<P::Output>>
+    where
+        R: io::Read + io::Seek,
+        P: Parseable,
+    {
+        use std::io::SeekFrom;
+
+        let (mut id_0, mut size_0, _) = ebml::read_element_id_size(&mut file)?;
+        while id_0 != ids::SEGMENT {
+            file.seek(SeekFrom::Current(size_0 as i64)).map(|_| ())?;
+            let (id, size, _) = ebml::read_element_id_size(&mut file)?;
+            id_0 = id;
+            size_0 = size;
+        }
+
+        let segment_start = file.stream_position()?;
+
+        while size_0 > 0 {
+            let (id_1, size_1, len) = ebml::read_element_id_size(&mut file)?;
+            match id_1 {
+                ids::SEEKHEAD => {
+                    // if seektable encountered, find part from that
+                    let seektable = Seektable::parse(&mut file, segment_start, size_1)?;
+
+                    if let Some(pos) = seektable.get(P::ID)? {
+                        file.seek(SeekFrom::Start(pos))?;
+                        let (i, s, _) = ebml::read_element_id_size(&mut file)?;
+                        assert_eq!(i, P::ID);
+                        return P::parse(&mut file, s).map(Some);
+                    }
+                }
+                // if no seektable, try to find part separately
+                id if id == P::ID => {
+                    return P::parse(&mut file, size_1).map(Some);
+                }
+                _ => {
+                    file.seek(SeekFrom::Current(size_1 as i64)).map(|_| ())?;
+                }
+            }
+            size_0 -= len;
+            size_0 -= size_1;
+        }
+
+        Ok(None)
+    }
+
     /// Returns all tracks with a type of "video"
     pub fn video_tracks(&self) -> impl Iterator<Item = &Track> {
         self.tracks.iter().filter(|t| t.is_video())
@@ -262,6 +309,18 @@ impl Seek {
     }
 }
 
+/// An element which can be parsed from the Matroska stream
+pub trait Parseable {
+    /// What to parse from the stream, such as ourself or a Vec of ourselves
+    type Output;
+
+    /// Our Matroska element ID
+    const ID: u32;
+
+    /// Performs the actual parsing
+    fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Self::Output>;
+}
+
 /// An Info segment with information pertaining to the entire file
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Info {
@@ -299,6 +358,12 @@ impl Info {
             writing_app: String::new(),
         }
     }
+}
+
+impl Parseable for Info {
+    type Output = Info;
+
+    const ID: u32 = ids::INFO;
 
     fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Info> {
         let mut info = Info::new();
@@ -491,22 +556,6 @@ impl Track {
         matches!(self.tracktype, Tracktype::Subtitle)
     }
 
-    fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<Track>> {
-        Element::parse_master(r, size, Some(ids::TRACKENTRY)).map(|elements| {
-            elements
-                .into_iter()
-                .filter_map(|e| match e {
-                    Element {
-                        id: ids::TRACKENTRY,
-                        val: ElementType::Master(sub_elements),
-                        ..
-                    } => Some(Track::build_entry(sub_elements)),
-                    _ => None,
-                })
-                .collect()
-        })
-    }
-
     fn build_entry(elements: Vec<Element>) -> Track {
         let mut track = Track::new();
         for e in elements {
@@ -563,7 +612,7 @@ impl Track {
                     val: ElementType::Binary(hearing_impaired),
                     ..
                 } => {
-                    track.hearing_impaired = hearing_impaired.get(0).map(|b| *b != 0);
+                    track.hearing_impaired = hearing_impaired.first().map(|b| *b != 0);
                 }
                 Element {
                     id: ids::FLAGHEARINGIMPAIRED,
@@ -577,7 +626,7 @@ impl Track {
                     val: ElementType::Binary(visual_impaired),
                     ..
                 } => {
-                    track.visual_impaired = visual_impaired.get(0).map(|b| *b != 0);
+                    track.visual_impaired = visual_impaired.first().map(|b| *b != 0);
                 }
                 Element {
                     id: ids::FLAGVISUALIMPAIRED,
@@ -591,7 +640,7 @@ impl Track {
                     val: ElementType::Binary(text_descriptions),
                     ..
                 } => {
-                    track.text_descriptions = text_descriptions.get(0).map(|b| *b != 0);
+                    track.text_descriptions = text_descriptions.first().map(|b| *b != 0);
                 }
                 Element {
                     id: ids::FLAGTEXTDESCRIPTIONS,
@@ -605,7 +654,7 @@ impl Track {
                     val: ElementType::Binary(original),
                     ..
                 } => {
-                    track.original = original.get(0).map(|b| *b != 0);
+                    track.original = original.first().map(|b| *b != 0);
                 }
                 Element {
                     id: ids::FLAGORIGINAL,
@@ -619,7 +668,7 @@ impl Track {
                     val: ElementType::Binary(commentary),
                     ..
                 } => {
-                    track.commentary = commentary.get(0).map(|b| *b != 0);
+                    track.commentary = commentary.first().map(|b| *b != 0);
                 }
                 Element {
                     id: ids::FLAGCOMMENTARY,
@@ -707,6 +756,28 @@ impl Track {
     }
 }
 
+impl Parseable for Track {
+    type Output = Vec<Track>;
+
+    const ID: u32 = ids::TRACKS;
+
+    fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<Track>> {
+        Element::parse_master(r, size, Some(ids::TRACKENTRY)).map(|elements| {
+            elements
+                .into_iter()
+                .filter_map(|e| match e {
+                    Element {
+                        id: ids::TRACKENTRY,
+                        val: ElementType::Master(sub_elements),
+                        ..
+                    } => Some(Track::build_entry(sub_elements)),
+                    _ => None,
+                })
+                .collect()
+        })
+    }
+}
+
 /// The type of a given track
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub enum Tracktype {
@@ -789,7 +860,7 @@ impl Video {
     fn build(elements: Vec<Element>) -> Video {
         let mut video = Video::new();
         for e in elements {
-            match e {
+            match dbg!(e) {
                 Element {
                     id: ids::PIXELWIDTH,
                     val: ElementType::UInt(width),
@@ -891,13 +962,13 @@ impl std::fmt::Display for StereoMode {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
         match self {
             StereoMode::Mono => write!(f, "mono"),
-            StereoMode::SideBySide(o) => write!(f, "side by side ({})", o),
-            StereoMode::TopBottom(o) => write!(f, "top - bottom ({})", o),
-            StereoMode::Checkboard(o) => write!(f, "checkboard ({})", o),
-            StereoMode::RowInterleaved(o) => write!(f, "row interleaved ({})", o),
-            StereoMode::ColumnInterleaved(o) => write!(f, "column interleaved ({})", o),
-            StereoMode::Anaglyph(c) => write!(f, "anaglyph ({})", c),
-            StereoMode::Interlaced(o) => write!(f, "interlaced ({})", o),
+            StereoMode::SideBySide(o) => write!(f, "side by side ({o})"),
+            StereoMode::TopBottom(o) => write!(f, "top - bottom ({o})"),
+            StereoMode::Checkboard(o) => write!(f, "checkboard ({o})"),
+            StereoMode::RowInterleaved(o) => write!(f, "row interleaved ({o})"),
+            StereoMode::ColumnInterleaved(o) => write!(f, "column interleaved ({o})"),
+            StereoMode::Anaglyph(c) => write!(f, "anaglyph ({c})"),
+            StereoMode::Interlaced(o) => write!(f, "interlaced ({o})"),
         }
     }
 }
@@ -1015,22 +1086,6 @@ impl Attachment {
         }
     }
 
-    fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<Attachment>> {
-        Element::parse_master(r, size, Some(ids::ATTACHEDFILE)).map(|elements| {
-            elements
-                .into_iter()
-                .filter_map(|e| match e {
-                    Element {
-                        id: ids::ATTACHEDFILE,
-                        val: ElementType::Master(sub_elements),
-                        ..
-                    } => Some(Attachment::build_entry(sub_elements)),
-                    _ => None,
-                })
-                .collect()
-        })
-    }
-
     fn build_entry(elements: Vec<Element>) -> Attachment {
         let mut attachment = Attachment::new();
         for e in elements {
@@ -1070,6 +1125,28 @@ impl Attachment {
     }
 }
 
+impl Parseable for Attachment {
+    type Output = Vec<Attachment>;
+
+    const ID: u32 = ids::ATTACHMENTS;
+
+    fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<Attachment>> {
+        Element::parse_master(r, size, Some(ids::ATTACHEDFILE)).map(|elements| {
+            elements
+                .into_iter()
+                .filter_map(|e| match e {
+                    Element {
+                        id: ids::ATTACHEDFILE,
+                        val: ElementType::Master(sub_elements),
+                        ..
+                    } => Some(Attachment::build_entry(sub_elements)),
+                    _ => None,
+                })
+                .collect()
+        })
+    }
+}
+
 /// A complete set of chapters
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ChapterEdition {
@@ -1094,22 +1171,6 @@ impl ChapterEdition {
             ordered: false,
             chapters: Vec::new(),
         }
-    }
-
-    fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<ChapterEdition>> {
-        Element::parse_master(r, size, Some(ids::EDITIONENTRY)).map(|elements| {
-            elements
-                .into_iter()
-                .filter_map(|e| match e {
-                    Element {
-                        id: ids::EDITIONENTRY,
-                        val: ElementType::Master(sub_elements),
-                        ..
-                    } => Some(ChapterEdition::build_entry(sub_elements)),
-                    _ => None,
-                })
-                .collect()
-        })
     }
 
     fn build_entry(elements: Vec<Element>) -> ChapterEdition {
@@ -1155,6 +1216,28 @@ impl ChapterEdition {
             }
         }
         chapteredition
+    }
+}
+
+impl Parseable for ChapterEdition {
+    type Output = Vec<ChapterEdition>;
+
+    const ID: u32 = ids::CHAPTERS;
+
+    fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<ChapterEdition>> {
+        Element::parse_master(r, size, Some(ids::EDITIONENTRY)).map(|elements| {
+            elements
+                .into_iter()
+                .filter_map(|e| match e {
+                    Element {
+                        id: ids::EDITIONENTRY,
+                        val: ElementType::Master(sub_elements),
+                        ..
+                    } => Some(ChapterEdition::build_entry(sub_elements)),
+                    _ => None,
+                })
+                .collect()
+        })
     }
 }
 
@@ -1328,22 +1411,6 @@ impl Tag {
         }
     }
 
-    fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<Tag>> {
-        Element::parse_master(r, size, Some(ids::TAG)).map(|elements| {
-            elements
-                .into_iter()
-                .filter_map(|e| match e {
-                    Element {
-                        id: ids::TAG,
-                        val: ElementType::Master(sub_elements),
-                        ..
-                    } => Some(Tag::build_entry(sub_elements)),
-                    _ => None,
-                })
-                .collect()
-        })
-    }
-
     fn build_entry(elements: Vec<Element>) -> Tag {
         let mut tag = Tag::new();
         for e in elements {
@@ -1366,6 +1433,28 @@ impl Tag {
             }
         }
         tag
+    }
+}
+
+impl Parseable for Tag {
+    type Output = Vec<Tag>;
+
+    const ID: u32 = ids::TAGS;
+
+    fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<Tag>> {
+        Element::parse_master(r, size, Some(ids::TAG)).map(|elements| {
+            elements
+                .into_iter()
+                .filter_map(|e| match e {
+                    Element {
+                        id: ids::TAG,
+                        val: ElementType::Master(sub_elements),
+                        ..
+                    } => Some(Tag::build_entry(sub_elements)),
+                    _ => None,
+                })
+                .collect()
+        })
     }
 }
 
