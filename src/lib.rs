@@ -860,7 +860,7 @@ impl Video {
     fn build(elements: Vec<Element>) -> Video {
         let mut video = Video::new();
         for e in elements {
-            match dbg!(e) {
+            match e {
                 Element {
                     id: ids::PIXELWIDTH,
                     val: ElementType::UInt(width),
