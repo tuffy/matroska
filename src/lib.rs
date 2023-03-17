@@ -146,50 +146,13 @@ impl Matroska {
     }
 
     /// Returns a single item from the Matroska file such as Info
-    pub fn get<R, P>(mut file: R) -> Result<Option<P::Output>>
+    #[deprecated(since = "0.21.0", note = "use matroska::get() function instead")]
+    pub fn get<R, P>(file: R) -> Result<Option<P::Output>>
     where
         R: io::Read + io::Seek,
         P: Parseable,
     {
-        use std::io::SeekFrom;
-
-        let (mut id_0, mut size_0, _) = ebml::read_element_id_size(&mut file)?;
-        while id_0 != ids::SEGMENT {
-            file.seek(SeekFrom::Current(size_0 as i64)).map(|_| ())?;
-            let (id, size, _) = ebml::read_element_id_size(&mut file)?;
-            id_0 = id;
-            size_0 = size;
-        }
-
-        let segment_start = file.stream_position()?;
-
-        while size_0 > 0 {
-            let (id_1, size_1, len) = ebml::read_element_id_size(&mut file)?;
-            match id_1 {
-                ids::SEEKHEAD => {
-                    // if seektable encountered, find part from that
-                    let seektable = Seektable::parse(&mut file, segment_start, size_1)?;
-
-                    if let Some(pos) = seektable.get(P::ID)? {
-                        file.seek(SeekFrom::Start(pos))?;
-                        let (i, s, _) = ebml::read_element_id_size(&mut file)?;
-                        assert_eq!(i, P::ID);
-                        return P::parse(&mut file, s).map(Some);
-                    }
-                }
-                // if no seektable, try to find part separately
-                id if id == P::ID => {
-                    return P::parse(&mut file, size_1).map(Some);
-                }
-                _ => {
-                    file.seek(SeekFrom::Current(size_1 as i64)).map(|_| ())?;
-                }
-            }
-            size_0 -= len;
-            size_0 -= size_1;
-        }
-
-        Ok(None)
+        get::<R, P>(file)
     }
 
     /// Returns all tracks with a type of "video"
@@ -1693,4 +1656,51 @@ pub enum TagValue {
     String(String),
     /// Tag's value as binary
     Binary(Vec<u8>),
+}
+
+/// Returns a single item from the Matroska file such as Info
+pub fn get<R, P>(mut file: R) -> Result<Option<P::Output>>
+where
+    R: io::Read + io::Seek,
+    P: Parseable,
+{
+    use std::io::SeekFrom;
+
+    let (mut id_0, mut size_0, _) = ebml::read_element_id_size(&mut file)?;
+    while id_0 != ids::SEGMENT {
+        file.seek(SeekFrom::Current(size_0 as i64)).map(|_| ())?;
+        let (id, size, _) = ebml::read_element_id_size(&mut file)?;
+        id_0 = id;
+        size_0 = size;
+    }
+
+    let segment_start = file.stream_position()?;
+
+    while size_0 > 0 {
+        let (id_1, size_1, len) = ebml::read_element_id_size(&mut file)?;
+        match id_1 {
+            ids::SEEKHEAD => {
+                // if seektable encountered, find part from that
+                let seektable = Seektable::parse(&mut file, segment_start, size_1)?;
+
+                if let Some(pos) = seektable.get(P::ID)? {
+                    file.seek(SeekFrom::Start(pos))?;
+                    let (i, s, _) = ebml::read_element_id_size(&mut file)?;
+                    assert_eq!(i, P::ID);
+                    return P::parse(&mut file, s).map(Some);
+                }
+            }
+            // if no seektable, try to find part separately
+            id if id == P::ID => {
+                return P::parse(&mut file, size_1).map(Some);
+            }
+            _ => {
+                file.seek(SeekFrom::Current(size_1 as i64)).map(|_| ())?;
+            }
+        }
+        size_0 -= len;
+        size_0 -= size_1;
+    }
+
+    Ok(None)
 }
