@@ -11,13 +11,18 @@
 //! Implemented as a set of nested structs with public values
 //! which one can use directly.
 //!
-//! ## Example
+//! ## Example 1
 //! ```no_run
-//! use std::fs::File;
-//! use matroska::Matroska;
-//! let f = File::open("filename.mkv").unwrap();
-//! let matroska = Matroska::open(f).unwrap();
+//! let matroska = matroska::open("file.mkv").unwrap();
 //! println!("title : {:?}", matroska.info.title);
+//! ```
+//!
+//! ## Example 2
+//! ```no_run
+//! use matroska::Info;
+//! if let Ok(Some(Info { duration, ..})) = matroska::get_from::<_, Info>("file.mkv") {
+//!     println!("duration : {:?}", duration);
+//! }
 //! ```
 //!
 //! For additional information about the Matroska format, see the
@@ -274,7 +279,7 @@ impl Seek {
 
 /// An element which can be parsed from the Matroska stream
 pub trait Parseable {
-    /// What to parse from the stream, such as ourself or a Vec of ourselves
+    /// What to parse from the stream, such as ourself or a `Vec` of ourselves
     type Output;
 
     /// Our Matroska element ID
@@ -1658,7 +1663,7 @@ pub enum TagValue {
     Binary(Vec<u8>),
 }
 
-/// Returns a single item from the Matroska file such as Info
+/// Returns a single item from open Matroska file such as `Info`
 pub fn get<R, P>(mut file: R) -> Result<Option<P::Output>>
 where
     R: io::Read + io::Seek,
@@ -1703,4 +1708,24 @@ where
     }
 
     Ok(None)
+}
+
+/// Returns a single item from Matroska file on disk, such as `Info`
+pub fn get_from<P, R>(path: P) -> Result<Option<R::Output>>
+where
+    P: AsRef<std::path::Path>,
+    R: Parseable,
+{
+    std::fs::File::open(path)
+        .map(std::io::BufReader::new)
+        .map_err(MatroskaError::Io)
+        .and_then(get::<_, R>)
+}
+
+/// Opens Matroska file on disk
+pub fn open<P: AsRef<std::path::Path>>(path: P) -> Result<Matroska> {
+    std::fs::File::open(path)
+        .map(std::io::BufReader::new)
+        .map_err(MatroskaError::Io)
+        .and_then(Matroska::open)
 }
