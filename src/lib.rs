@@ -42,6 +42,9 @@ use time::OffsetDateTime;
 pub use ebml::MatroskaError;
 use ebml::{Element, ElementType, Result};
 
+/// A possible error when reading or parsing a Matroska file
+pub type Error = MatroskaError;
+
 /// A Matroska file
 #[derive(Debug, Clone)]
 pub struct Matroska {
@@ -508,19 +511,19 @@ impl Track {
 
     /// returns `true` if track is video
     #[inline]
-    fn is_video(&self) -> bool {
+    pub fn is_video(&self) -> bool {
         matches!(self.tracktype, Tracktype::Video)
     }
 
     /// returns `true` if track is audio
     #[inline]
-    fn is_audio(&self) -> bool {
+    pub fn is_audio(&self) -> bool {
         matches!(self.tracktype, Tracktype::Audio)
     }
 
     /// returns `true` if track is subtitle
     #[inline]
-    fn is_subtitle(&self) -> bool {
+    pub fn is_subtitle(&self) -> bool {
         matches!(self.tracktype, Tracktype::Subtitle)
     }
 

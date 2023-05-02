@@ -2,7 +2,7 @@
 name = "matroska"
 description = "Library for parsing Matroska (MKV) file metadata."
 keywords = ["matroska", "mkv"]
-version = "0.22.0"
+version = "0.23.0"
 authors = ["Brian Langenberger <bjl@usa.net>"]
 license = "MIT/Apache-2.0"
 documentation = "https://docs.rs/matroska/"
