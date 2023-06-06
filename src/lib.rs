@@ -29,6 +29,7 @@
 //! official [specification](https://matroska.org)
 
 #![warn(missing_docs)]
+#![forbid(unsafe_code)]
 
 use std::collections::BTreeMap;
 use std::io;
@@ -37,10 +38,8 @@ use std::time::Duration;
 mod ebml;
 mod ids;
 
-use time::OffsetDateTime;
-
 pub use ebml::MatroskaError;
-use ebml::{Element, ElementType, Result};
+use ebml::{DateTime, Element, ElementType, Result};
 
 /// A possible error when reading or parsing a Matroska file
 pub type Error = MatroskaError;
@@ -308,7 +307,7 @@ pub struct Info {
     /// The file's duration
     pub duration: Option<Duration>,
     /// Production date
-    pub date_utc: Option<OffsetDateTime>,
+    pub date_utc: Option<DateTime>,
     /// The muxing application or library
     pub muxing_app: String,
     /// The writing application

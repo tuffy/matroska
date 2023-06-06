@@ -11,7 +11,6 @@ use std::{error, fmt, io};
 
 use bitstream_io::BitRead;
 use phf::{phf_map, phf_set, Map, Set};
-use time::OffsetDateTime;
 
 pub type Result<T> = std::result::Result<T, MatroskaError>;
 
@@ -187,7 +186,7 @@ pub enum ElementType {
     UTF8(String),
     Binary(Vec<u8>),
     Float(f64),
-    Date(OffsetDateTime),
+    Date(DateTime),
 }
 
 /// A possible error when parsing a Matroska file
@@ -342,12 +341,9 @@ pub fn read_utf8<R: io::Read>(r: &mut R, size: u64) -> Result<String> {
     read_bin(r, size).and_then(|bytes| String::from_utf8(bytes).map_err(MatroskaError::UTF8))
 }
 
-pub fn read_date<R: io::Read>(r: &mut R, size: u64) -> Result<OffsetDateTime> {
+pub fn read_date<R: io::Read>(r: &mut R, size: u64) -> Result<DateTime> {
     if size == 8 {
-        use time::macros::datetime;
-
-        read_int(r, size)
-            .map(|d| datetime!(2001-01-01 00:00:00 UTC) + time::Duration::nanoseconds(d))
+        read_int(r, size).map(DateTime)
     } else {
         Err(MatroskaError::InvalidDate)
     }
@@ -358,4 +354,32 @@ pub fn read_bin<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<u8>> {
     r.read_exact(&mut buf)
         .map(|()| buf)
         .map_err(MatroskaError::Io)
+}
+
+/// an opaque DateTime value representing seconds since the MKV epoch
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DateTime(i64);
+
+impl From<DateTime> for i64 {
+    fn from(DateTime(n): DateTime) -> Self {
+        n
+    }
+}
+
+#[cfg(feature = "time")]
+impl From<DateTime> for time::OffsetDateTime {
+    fn from(DateTime(n): DateTime) -> Self {
+        use time::macros::datetime;
+
+        datetime!(2001-01-01 00:00:00 UTC) + time::Duration::nanoseconds(n)
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl From<DateTime> for chrono::DateTime<chrono::Utc> {
+    fn from(DateTime(n): DateTime) -> Self {
+        use chrono::{Duration, TimeZone, Utc};
+
+        Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0).unwrap() + Duration::nanoseconds(n)
+    }
 }
