@@ -356,7 +356,7 @@ pub fn read_bin<R: io::Read>(r: &mut R, size: u64) -> Result<Vec<u8>> {
         .map_err(MatroskaError::Io)
 }
 
-/// an opaque DateTime value representing seconds since the MKV epoch
+/// An opaque DateTime value representing seconds since the MKV epoch
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DateTime(i64);
 

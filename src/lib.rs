@@ -38,8 +38,8 @@ use std::time::Duration;
 mod ebml;
 mod ids;
 
-pub use ebml::MatroskaError;
-use ebml::{DateTime, Element, ElementType, Result};
+pub use ebml::{DateTime, MatroskaError};
+use ebml::{Element, ElementType, Result};
 
 /// A possible error when reading or parsing a Matroska file
 pub type Error = MatroskaError;
