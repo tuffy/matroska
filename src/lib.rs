@@ -337,7 +337,7 @@ impl Parseable for Info {
 
     fn parse<R: io::Read>(r: &mut R, size: u64) -> Result<Info> {
         let mut info = Info::new();
-        let mut timecode_scale = None;
+        let mut timecode_scale = 1000000;
         let mut duration = None;
 
         for e in Element::parse_master(r, size, Some(ids::INFO))? {
@@ -382,7 +382,7 @@ impl Parseable for Info {
                     val: ElementType::UInt(scale),
                     ..
                 } => {
-                    timecode_scale = Some(scale);
+                    timecode_scale = scale;
                 }
                 Element {
                     id: ids::DURATION,
@@ -413,9 +413,7 @@ impl Parseable for Info {
         }
 
         if let Some(d) = duration {
-            if let Some(t) = timecode_scale {
-                info.duration = Some(Duration::from_nanos((d * t as f64) as u64))
-            }
+            info.duration = Some(Duration::from_nanos((d * timecode_scale as f64) as u64))
         }
 
         Ok(info)
