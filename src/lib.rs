@@ -1505,7 +1505,7 @@ impl From<u64> for TargetTypeValue {
 impl Target {
     fn new() -> Target {
         Target {
-            target_type_value: None,
+            target_type_value: Some(TargetTypeValue::Episode),
             target_type: None,
             track_uids: Vec::new(),
             edition_uids: Vec::new(),
