@@ -247,19 +247,19 @@ pub fn read_element_id_size<R: io::Read>(reader: &mut R) -> Result<(u32, u64, u6
 fn read_element_id<R: BitRead>(r: &mut R) -> Result<(u32, u64)> {
     match r.read_unary1() {
         Ok(0) => r
-            .read::<u32>(7)
+            .read_in::<7, u32>()
             .map_err(MatroskaError::Io)
             .map(|u| (0b1000_0000 | u, 1)),
         Ok(1) => r
-            .read::<u32>(6 + 8)
+            .read_in::<{ 6 + 8 }, u32>()
             .map_err(MatroskaError::Io)
             .map(|u| ((0b0100_0000 << 8) | u, 2)),
         Ok(2) => r
-            .read::<u32>(5 + 16)
+            .read_in::<{ 5 + 16 }, u32>()
             .map_err(MatroskaError::Io)
             .map(|u| ((0b0010_0000 << 16) | u, 3)),
         Ok(3) => r
-            .read::<u32>(4 + 24)
+            .read_in::<{ 4 + 24 }, u32>()
             .map_err(MatroskaError::Io)
             .map(|u| ((0b0001_0000 << 24) | u, 4)),
         Ok(_) => Err(MatroskaError::InvalidID),
@@ -269,29 +269,38 @@ fn read_element_id<R: BitRead>(r: &mut R) -> Result<(u32, u64)> {
 
 fn read_element_size<R: BitRead>(r: &mut R) -> Result<(u64, u64)> {
     match r.read_unary1() {
-        Ok(0) => r.read(7).map(|s| (s, 1)).map_err(MatroskaError::Io),
-        Ok(1) => r.read(6 + 8).map(|s| (s, 2)).map_err(MatroskaError::Io),
+        Ok(0) => r
+            .read_in::<7, _>()
+            .map(|s| (s, 1))
+            .map_err(MatroskaError::Io),
+        Ok(1) => r
+            .read_in::<{ 6 + 8 }, _>()
+            .map(|s| (s, 2))
+            .map_err(MatroskaError::Io),
         Ok(2) => r
-            .read(5 + (2 * 8))
+            .read_in::<{ 5 + (2 * 8) }, _>()
             .map(|s| (s, 3))
             .map_err(MatroskaError::Io),
         Ok(3) => r
-            .read(4 + (3 * 8))
+            .read_in::<{ 4 + (3 * 8) }, _>()
             .map(|s| (s, 4))
             .map_err(MatroskaError::Io),
         Ok(4) => r
-            .read(3 + (4 * 8))
+            .read_in::<{ 3 + (4 * 8) }, _>()
             .map(|s| (s, 5))
             .map_err(MatroskaError::Io),
         Ok(5) => r
-            .read(2 + (5 * 8))
+            .read_in::<{ 2 + (5 * 8) }, _>()
             .map(|s| (s, 6))
             .map_err(MatroskaError::Io),
         Ok(6) => r
-            .read(1 + (6 * 8))
+            .read_in::<{ 1 + (6 * 8) }, _>()
             .map(|s| (s, 7))
             .map_err(MatroskaError::Io),
-        Ok(7) => r.read(7 * 8).map(|s| (s, 8)).map_err(MatroskaError::Io),
+        Ok(7) => r
+            .read_in::<{ 7 * 8 }, _>()
+            .map(|s| (s, 8))
+            .map_err(MatroskaError::Io),
         Ok(_) => Err(MatroskaError::InvalidSize),
         Err(err) => Err(MatroskaError::Io(err)),
     }
@@ -319,12 +328,12 @@ pub fn read_float<R: io::Read>(r: &mut R, size: u64) -> Result<f64> {
     let mut r = BitReader::new(r);
     match size {
         4 => {
-            let i: u32 = r.read(32).map_err(MatroskaError::Io)?;
+            let i: u32 = r.read_to().map_err(MatroskaError::Io)?;
             let f = f32::from_bits(i);
             Ok(f64::from(f))
         }
         8 => {
-            let i: u64 = r.read(64).map_err(MatroskaError::Io)?;
+            let i: u64 = r.read_to().map_err(MatroskaError::Io)?;
             let f = f64::from_bits(i);
             Ok(f)
         }
