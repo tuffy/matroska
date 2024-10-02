@@ -15,3 +15,4 @@ bitstream-io = "2.4"
 phf = { version = "0.11", features = ["macros"] }
 time = { version = "0.3", features = ["macros"], optional = true }
 chrono = { version = "0.4", optional = true }
+jiff = { version = "0.1", optional = true }

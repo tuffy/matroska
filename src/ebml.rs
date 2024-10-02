@@ -392,3 +392,10 @@ impl From<DateTime> for chrono::DateTime<chrono::Utc> {
         Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0).unwrap() + Duration::nanoseconds(n)
     }
 }
+
+#[cfg(feature = "jiff")]
+impl From<DateTime> for jiff::civil::DateTime {
+    fn from(DateTime(n): DateTime) -> Self {
+        jiff::civil::DateTime::new(2001, 1, 1, 0, 0, 0, 0).unwrap() + jiff::Span::new().nanoseconds(n)
+    }
+}
