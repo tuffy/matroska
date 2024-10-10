@@ -927,7 +927,7 @@ pub enum StereoMode {
 
 impl std::fmt::Display for StereoMode {
     #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             StereoMode::Mono => write!(f, "mono"),
             StereoMode::SideBySide(o) => write!(f, "side by side ({o})"),
@@ -1652,6 +1652,15 @@ pub enum Language {
     ISO639(String),
     /// Lanuage formatted as IETF
     IETF(String),
+}
+
+impl std::fmt::Display for Language {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::ISO639(s) | Self::IETF(s) => s.fmt(f),
+        }
+    }
 }
 
 /// A tag's value
