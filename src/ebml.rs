@@ -245,83 +245,61 @@ pub fn read_element_id_size<R: io::Read>(reader: &mut R) -> Result<(u32, u64, u6
 }
 
 fn read_element_id<R: BitRead>(r: &mut R) -> Result<(u32, u64)> {
-    match r.read_unary1() {
-        Ok(0) => r
-            .read_in::<7, u32>()
-            .map_err(MatroskaError::Io)
-            .map(|u| (0b1000_0000 | u, 1)),
-        Ok(1) => r
-            .read_in::<{ 6 + 8 }, u32>()
-            .map_err(MatroskaError::Io)
-            .map(|u| ((0b0100_0000 << 8) | u, 2)),
-        Ok(2) => r
-            .read_in::<{ 5 + 16 }, u32>()
-            .map_err(MatroskaError::Io)
-            .map(|u| ((0b0010_0000 << 16) | u, 3)),
-        Ok(3) => r
-            .read_in::<{ 4 + 24 }, u32>()
-            .map_err(MatroskaError::Io)
-            .map(|u| ((0b0001_0000 << 24) | u, 4)),
-        Ok(_) => Err(MatroskaError::InvalidID),
-        Err(err) => Err(MatroskaError::Io(err)),
-    }
+    use bitstream_io::BitCount;
+
+    let (size, shift, bytes): (BitCount<{ 4 + 24 }>, u32, u64) = match r.read_unary::<1>()? {
+        0 => (BitCount::new::<7>(), 0b1000_0000, 1),
+        1 => (BitCount::new::<{ 6 + 8 }>(), (0b0100_0000 << 8), 2),
+        2 => (BitCount::new::<{ 5 + 16 }>(), (0b0010_0000 << 16), 3),
+        3 => (BitCount::new::<{ 4 + 24 }>(), (0b0001_0000 << 24), 4),
+        _ => return Err(MatroskaError::InvalidID)?,
+    };
+
+    Ok((r.read_counted(size).map(|u: u32| shift | u)?, bytes))
 }
 
 fn read_element_size<R: BitRead>(r: &mut R) -> Result<(u64, u64)> {
-    match r.read_unary1() {
-        Ok(0) => r
-            .read_in::<7, _>()
-            .map(|s| (s, 1))
-            .map_err(MatroskaError::Io),
-        Ok(1) => r
-            .read_in::<{ 6 + 8 }, _>()
-            .map(|s| (s, 2))
-            .map_err(MatroskaError::Io),
-        Ok(2) => r
-            .read_in::<{ 5 + (2 * 8) }, _>()
-            .map(|s| (s, 3))
-            .map_err(MatroskaError::Io),
-        Ok(3) => r
-            .read_in::<{ 4 + (3 * 8) }, _>()
-            .map(|s| (s, 4))
-            .map_err(MatroskaError::Io),
-        Ok(4) => r
-            .read_in::<{ 3 + (4 * 8) }, _>()
-            .map(|s| (s, 5))
-            .map_err(MatroskaError::Io),
-        Ok(5) => r
-            .read_in::<{ 2 + (5 * 8) }, _>()
-            .map(|s| (s, 6))
-            .map_err(MatroskaError::Io),
-        Ok(6) => r
-            .read_in::<{ 1 + (6 * 8) }, _>()
-            .map(|s| (s, 7))
-            .map_err(MatroskaError::Io),
-        Ok(7) => r
-            .read_in::<{ 7 * 8 }, _>()
-            .map(|s| (s, 8))
-            .map_err(MatroskaError::Io),
-        Ok(_) => Err(MatroskaError::InvalidSize),
-        Err(err) => Err(MatroskaError::Io(err)),
-    }
+    use bitstream_io::BitCount;
+
+    let (size, bytes): (BitCount<{ 7 * 8 }>, u64) = match r.read_unary::<1>()? {
+        0 => (BitCount::new::<7>(), 1),
+        1 => (BitCount::new::<{ 6 + 8 }>(), 2),
+        2 => (BitCount::new::<{ 5 + (2 * 8) }>(), 3),
+        3 => (BitCount::new::<{ 4 + (3 * 8) }>(), 4),
+        4 => (BitCount::new::<{ 3 + (4 * 8) }>(), 5),
+        5 => (BitCount::new::<{ 2 + (5 * 8) }>(), 6),
+        6 => (BitCount::new::<{ 1 + (6 * 8) }>(), 7),
+        7 => (BitCount::new::<{ 7 * 8 }>(), 8),
+        _ => return Err(MatroskaError::InvalidSize),
+    };
+
+    Ok((r.read_counted(size)?, bytes))
 }
 
 pub fn read_int<R: io::Read>(r: &mut R, size: u64) -> Result<i64> {
-    let mut r = BitReader::new(r);
-    match size {
-        0 => Ok(0),
-        s @ 1..=8 => r.read_signed(s as u32 * 8).map_err(MatroskaError::Io),
-        _ => Err(MatroskaError::InvalidUint),
-    }
+    use std::convert::{TryFrom, TryInto};
+
+    Ok(BitReader::new(r).read_counted::<{ 8 * 8 }, _>(
+        u32::try_from(size)
+            .map_err(|_| MatroskaError::InvalidUint)?
+            .checked_mul(8)
+            .ok_or(MatroskaError::InvalidUint)?
+            .try_into()
+            .map_err(|_| MatroskaError::InvalidUint)?,
+    )?)
 }
 
 pub fn read_uint<R: io::Read>(r: &mut R, size: u64) -> Result<u64> {
-    let mut r = BitReader::new(r);
-    match size {
-        0 => Ok(0),
-        s @ 1..=8 => r.read(s as u32 * 8).map_err(MatroskaError::Io),
-        _ => Err(MatroskaError::InvalidUint),
-    }
+    use std::convert::{TryFrom, TryInto};
+
+    Ok(BitReader::new(r).read_counted::<{ 8 * 8 }, _>(
+        u32::try_from(size)
+            .map_err(|_| MatroskaError::InvalidUint)?
+            .checked_mul(8)
+            .ok_or(MatroskaError::InvalidUint)?
+            .try_into()
+            .map_err(|_| MatroskaError::InvalidUint)?,
+    )?)
 }
 
 pub fn read_float<R: io::Read>(r: &mut R, size: u64) -> Result<f64> {
@@ -396,6 +374,7 @@ impl From<DateTime> for chrono::DateTime<chrono::Utc> {
 #[cfg(feature = "jiff")]
 impl From<DateTime> for jiff::civil::DateTime {
     fn from(DateTime(n): DateTime) -> Self {
-        jiff::civil::DateTime::new(2001, 1, 1, 0, 0, 0, 0).unwrap() + jiff::Span::new().nanoseconds(n)
+        jiff::civil::DateTime::new(2001, 1, 1, 0, 0, 0, 0).unwrap()
+            + jiff::Span::new().nanoseconds(n)
     }
 }
