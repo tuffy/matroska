@@ -1697,11 +1697,14 @@ where
                 // if seektable encountered, find part from that
                 let seektable = Seektable::parse(&mut file, segment_start, size_1)?;
 
-                if let Some(pos) = seektable.get(P::ID)? {
-                    file.seek(SeekFrom::Start(pos))?;
-                    let (i, s, _) = ebml::read_element_id_size(&mut file)?;
-                    assert_eq!(i, P::ID);
-                    return P::parse(&mut file, s).map(Some);
+                match seektable.get(P::ID)? {
+                    Some(pos) => {
+                        file.seek(SeekFrom::Start(pos))?;
+                        let (i, s, _) = ebml::read_element_id_size(&mut file)?;
+                        assert_eq!(i, P::ID);
+                        return P::parse(&mut file, s).map(Some);
+                    }
+                    None => return Ok(None),
                 }
             }
             // if no seektable, try to find part separately
