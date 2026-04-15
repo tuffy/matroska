@@ -178,6 +178,7 @@ impl Element {
 }
 
 #[derive(Debug)]
+#[allow(unused)]
 pub enum ElementType {
     Master(Vec<Element>),
     Int(i64),
